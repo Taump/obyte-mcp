@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/server";
 import type { ZodType } from "zod/v4";
+import { assetExplorerUrl, summarizeBalanceAmounts } from "./amounts.js";
 import { envelopeConfig } from "./config.js";
 import { executeEnvelope } from "./envelope.js";
 import { ObyteHttpClient } from "./obyteClient.js";
@@ -32,6 +33,8 @@ interface ToolDefinition {
   schema: ToolSchema;
   handler: ToolHandler;
   dryRun?: boolean;
+  /** Set on tools whose output contains raw smallest-unit amounts. */
+  amounts?: boolean;
 }
 
 export function registerObyteTools(server: McpServer, clients: Record<Network, ObyteHttpClient>, config: RuntimeConfig): void {
@@ -49,12 +52,20 @@ function withNetworkNote(description: string, config: RuntimeConfig): string {
   return `${description}\n\nNetwork: this server serves both Obyte networks at once. Pass "network":"mainnet" or "network":"testnet" to choose; when omitted it defaults to ${config.defaultNetwork}. If the user has not made the network explicit, confirm which network they mean before calling.`;
 }
 
+const AMOUNTS_DESCRIPTION_NOTE =
+  'Amounts: raw ledger amounts in this output are integers in the asset\'s smallest units (base is GBYTE with 9 decimals). Never show raw integers to users: prefer display_total fields when present, otherwise resolve decimals with obyte_resolve_asset or obyte_get_decimals_by_symbol_or_asset and divide by 10^decimals.';
+
+function toolDescription(tool: ToolDefinition, config: RuntimeConfig): string {
+  const base = withNetworkNote(tool.description, config);
+  return tool.amounts ? `${base}\n\n${AMOUNTS_DESCRIPTION_NOTE}` : base;
+}
+
 function registerTool(context: RegisterContext, tool: ToolDefinition): void {
   context.server.registerTool(
     tool.name,
     {
       title: tool.title,
-      description: withNetworkNote(tool.description, context.config),
+      description: toolDescription(tool, context.config),
       inputSchema: tool.schema as any,
       annotations: {
         title: tool.title,
@@ -84,9 +95,10 @@ function recommendedTools(_context: RegisterContext): ToolDefinition[] {
       name: "obyte_analyze_address",
       title: "Analyze Obyte Address",
       schema: schemas.analyzeAddressSchema,
+      amounts: true,
       description:
-        "Recommended first tool for understanding an Obyte address. Returns balances and optional definition, profile units, attestations, and bounded history. Use this instead of several raw calls when an agent needs an address overview. Output is a stable JSON envelope and may be truncated.",
-      handler: async (args, { client }) => {
+        "Recommended first tool whenever the user pastes an Obyte address (a 32-character base32 string) or asks about an Obyte wallet, balance, or account. Returns balances with a decimals-aware balance_summary (symbols, decimals, display totals), plus optional definition, profile units, attestations, and bounded history. Use this instead of several raw calls. Output is a stable JSON envelope and may be truncated.",
+      handler: async (args, { client, network }) => {
         const [balances, profileUnits, definition, attestations, history] = await Promise.all([
           client.getBalances([args.address]),
           client.getProfileUnits([args.address]),
@@ -94,15 +106,28 @@ function recommendedTools(_context: RegisterContext): ToolDefinition[] {
           args.include_attestations ? client.getAttestations(args.address).catch((error) => ({ error: String(error) })) : undefined,
           args.include_history ? client.getHistory([args.address]).catch((error) => ({ error: String(error) })) : undefined
         ]);
-        return { address: args.address, balances, profile_units: profileUnits, definition, attestations, history };
+        const balanceSummary = await summarizeBalanceAmounts(client, balances, {
+          configuredRegistryAddress: network.tokenRegistryAddress,
+          network: network.network
+        });
+        return {
+          address: args.address,
+          balances,
+          balance_summary: balanceSummary,
+          profile_units: profileUnits,
+          definition,
+          attestations,
+          history
+        };
       }
     },
     {
       name: "obyte_analyze_unit",
       title: "Analyze Obyte Unit",
       schema: schemas.analyzeUnitSchema,
+      amounts: true,
       description:
-        "Recommended tool for inspecting one Obyte unit. Fetches the joint and, when requested, follows the AA response chain for trigger units. Use when the user provides a unit hash and asks what happened. Output is hub data wrapped in a stable JSON envelope.",
+        "Recommended tool whenever the user pastes an Obyte unit hash (a 44-character base64 string, usually ending in \"=\") or asks about an Obyte transaction. Fetches the joint and, when requested, follows the AA response chain for trigger units. Payment output amounts are raw smallest units. Output is hub data wrapped in a stable JSON envelope.",
       handler: async (args, { client }) => ({
         unit: args.unit,
         joint: await client.getJoint(args.unit),
@@ -113,51 +138,77 @@ function recommendedTools(_context: RegisterContext): ToolDefinition[] {
       name: "obyte_analyze_aa",
       title: "Analyze Autonomous Agent",
       schema: schemas.analyzeAaSchema,
+      amounts: true,
       description:
-        "Recommended tool for summarizing an autonomous agent. Returns AA balances, selected state vars by prefix, and optional AA responses. Use for AA debugging or state inspection. State vars are sorted by key and output may be truncated.",
-      handler: async (args, { client }) => ({
-        address: args.address,
-        balances: args.include_balances ? await client.getAaBalances(args.address) : undefined,
-        state_vars: args.state_var_prefix ? await client.getAaStateVars(args.address, args.state_var_prefix) : undefined,
-        aa_responses: args.include_responses ? await client.getAaResponses(args.address) : undefined
-      })
+        "Recommended tool for summarizing an Obyte autonomous agent (AA). Returns AA balances with a decimals-aware balance_summary, selected state vars by prefix, and optional AA responses. Use for AA debugging or state inspection. State var amounts are raw smallest units. State vars are sorted by key and output may be truncated.",
+      handler: async (args, { client, network }) => {
+        const balances = args.include_balances ? await client.getAaBalances(args.address) : undefined;
+        const [balanceSummary, stateVars, aaResponses] = await Promise.all([
+          balances !== undefined
+            ? summarizeBalanceAmounts(client, balances, {
+                configuredRegistryAddress: network.tokenRegistryAddress,
+                network: network.network
+              })
+            : undefined,
+          args.state_var_prefix ? client.getAaStateVars(args.address, args.state_var_prefix) : undefined,
+          args.include_responses ? client.getAaResponses(args.address) : undefined
+        ]);
+        return {
+          address: args.address,
+          balances,
+          balance_summary: balanceSummary,
+          state_vars: stateVars,
+          aa_responses: aaResponses
+        };
+      }
     },
     {
       name: "obyte_resolve_asset",
       title: "Resolve Obyte Asset",
       schema: schemas.resolveAssetSchema,
       description:
-        "Recommended tool for resolving an asset id or token symbol in the selected network's registry. Returns asset, symbol, and decimals when available. Registry mappings are convenience metadata, not proof of legitimacy.",
-      handler: async (args, { client, network }) =>
-        resolveAsset(client, args.value, {
+        "Recommended tool for resolving an Obyte asset id (44-character base64 string) or token symbol (like GBYTE or OUSD) in the selected network's registry. Returns asset, symbol, and decimals when available. Always call this (or obyte_get_decimals_by_symbol_or_asset) before presenting amounts of unknown assets to users. Registry mappings are convenience metadata, not proof of legitimacy.",
+      handler: async (args, { client, network }) => {
+        const result = (await resolveAsset(client, args.value, {
           configuredRegistryAddress: network.tokenRegistryAddress,
           tokenRegistryAddress: args.token_registry_address
-        })
+        })) as Record<string, unknown>;
+        const urlTarget = typeof result.symbol === "string" ? result.symbol : args.value;
+        return {
+          ...result,
+          explorer_asset_url: assetExplorerUrl(network.network, urlTarget),
+          holders_hint:
+            "Open explorer_asset_url to see the asset description and current holders. Explorer amounts are already in display units - do not divide them by 10^decimals again."
+        };
+      }
     },
     {
       name: "obyte_prepare_aa_dry_run",
       title: "Prepare AA Dry Run",
       schema: schemas.prepareAaDryRunSchema,
       dryRun: true,
+      amounts: true,
       description:
-        "Recommended tool for simulating an autonomous-agent trigger through the selected network's hub. This does not sign, broadcast, or mutate local state. Dry-run tools are not marked idempotent and are not retried by default.",
+        "Recommended tool for simulating an Obyte autonomous-agent trigger through the selected network's hub. Trigger and response amounts are raw smallest units (1 GBYTE = 1e9 bytes) - convert user-facing amounts before building the trigger. This does not sign, broadcast, or mutate local state. Dry-run tools are not marked idempotent and are not retried by default.",
       handler: async (args, { client }) => ({ address: args.address, dry_run: await client.dryRunAa(args.address, args.trigger) })
     },
     {
       name: "obyte_get_portfolio_summary",
       title: "Get Portfolio Summary",
       schema: schemas.portfolioSummarySchema,
+      amounts: true,
       description:
-        "Recommended tool for summarizing balances for up to 20 addresses. Optionally enriches asset ids with symbols and decimals from the selected token registry. Use for user-facing balance explanations rather than raw get_balances.",
-      handler: async (args, { client }) => {
+        "Recommended tool for summarizing balances for up to 20 addresses. Returns raw balances plus totals_by_asset with symbols, decimals, and display totals already divided by 10^decimals (resolve_symbols controls registry lookups). Use for user-facing balance explanations rather than raw get_balances.",
+      handler: async (args, { client, network }) => {
         const balances = await client.getBalances(args.addresses);
-        return {
-          addresses: args.addresses,
-          balances,
-          symbol_resolution: args.resolve_symbols
-            ? { note: "Use obyte_resolve_asset for per-asset details when the balance map contains non-base assets." }
-            : undefined
-        };
+        const summary = await summarizeBalanceAmounts(client, balances, {
+          configuredRegistryAddress: network.tokenRegistryAddress,
+          tokenRegistryAddress: args.token_registry_address,
+          resolve: args.resolve_symbols,
+          maxResolvedAssets: 20,
+          network: network.network
+        });
+        return { addresses: args.addresses, balances, ...summary };
       }
     }
   ];
@@ -220,7 +271,8 @@ function rawTools(context: RegisterContext): ToolDefinition[] {
       name: "obyte_get_balances",
       title: "Get Balances",
       schema: schemas.addressesSchema,
-      description: "Raw hub read. Fetches balances for 1 to 20 addresses. Use obyte_get_portfolio_summary for agent-friendly summaries.",
+      amounts: true,
+      description: "Raw hub read. Fetches balances for 1 to 20 addresses. Use obyte_get_portfolio_summary for agent-friendly summaries with decimals-adjusted display totals.",
       handler: async (args, { client }) => client.getBalances(args.addresses)
     },
     {
@@ -248,6 +300,7 @@ function rawTools(context: RegisterContext): ToolDefinition[] {
       name: "obyte_get_history",
       title: "Get Address History",
       schema: schemas.getHistorySchema,
+      amounts: true,
       description:
         "Raw hub read. Returns history for 1 to 20 addresses. If witnesses are omitted, the server uses the 10-minute witnesses cache or fetches witnesses from the hub.",
       handler: async (args, { client }) => client.getHistory(args.addresses, args.witnesses, args.update_witnesses)
@@ -270,6 +323,7 @@ function rawTools(context: RegisterContext): ToolDefinition[] {
       name: "obyte_get_aa_response_chain",
       title: "Get AA Response Chain",
       schema: schemas.triggerUnitSchema,
+      amounts: true,
       description: "Raw hub read. Returns the autonomous-agent response chain for a trigger unit.",
       handler: async (args, { client }) => client.getAaResponseChain(args.trigger_unit)
     },
@@ -277,6 +331,7 @@ function rawTools(context: RegisterContext): ToolDefinition[] {
       name: "obyte_get_aa_responses",
       title: "Get AA Responses",
       schema: schemas.aaOrAasSchema,
+      amounts: true,
       description: "Raw hub read. Returns AA responses for one AA address or up to 20 AA addresses.",
       handler: async (args, { client }) => client.getAaResponses(args.aa ?? args.aas!)
     },
@@ -292,6 +347,7 @@ function rawTools(context: RegisterContext): ToolDefinition[] {
       title: "Dry Run AA",
       schema: schemas.dryRunAaSchema,
       dryRun: true,
+      amounts: true,
       description:
         "Raw hub dry run. Simulates triggering an autonomous agent with a JSON trigger payload. It does not sign or broadcast. Not retried by default and not marked idempotent.",
       handler: async (args, { client }) => client.dryRunAa(args.address, args.trigger)
@@ -307,15 +363,17 @@ function rawTools(context: RegisterContext): ToolDefinition[] {
       name: "obyte_get_aa_balances",
       title: "Get AA Balances",
       schema: schemas.aaAddressSchema,
-      description: "Raw hub read. Returns balances held by one autonomous agent address.",
+      amounts: true,
+      description: "Raw hub read. Returns balances held by one autonomous agent address. Use obyte_analyze_aa for a decimals-aware summary.",
       handler: async (args, { client }) => client.getAaBalances(args.address)
     },
     {
       name: "obyte_get_aa_state_vars",
       title: "Get AA State Vars",
       schema: schemas.getAaStateVarsSchema,
+      amounts: true,
       description:
-        "Raw hub read. Returns autonomous-agent state variables, optionally bounded by prefix/range. Prefix length is limited to 128 characters. Map-like output is sorted by key.",
+        "Raw hub read. Returns autonomous-agent state variables, optionally bounded by prefix/range. State vars holding amounts are raw smallest units. Prefix length is limited to 128 characters. Map-like output is sorted by key.",
       handler: async (args, { client }) => client.getAaStateVars(args.address, args.var_prefix, args.var_prefix_from, args.var_prefix_to)
     }
   ];

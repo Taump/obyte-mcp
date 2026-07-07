@@ -82,6 +82,30 @@ describe("network routing", () => {
     expect(explicitMainnet.meta.network).toBe("mainnet");
   });
 
+  it("returns decimals-adjusted display totals in the portfolio summary", async () => {
+    const fetchMock = vi.fn(async (url: unknown) => {
+      const path = String(url);
+      if (path.endsWith("/get_balances")) {
+        return new Response(
+          JSON.stringify({ data: { ADDR: { base: { stable: 2_000_000_000, pending: 500_000_000 } } } }),
+          { status: 200 }
+        );
+      }
+      return new Response(JSON.stringify({ data: {} }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const { call } = makeHarness(buildRuntimeConfig({}, {}), fetchMock);
+
+    const result = await call("obyte_get_portfolio_summary", { addresses: ["ADDR"] });
+    expect(result.ok).toBe(true);
+    expect(result.data.totals_by_asset.base).toMatchObject({
+      symbol: "GBYTE",
+      decimals: 9,
+      raw_total: 2_500_000_000,
+      display_total: "2.5"
+    });
+    expect(result.data.amounts_note).toContain("smallest units");
+  });
+
   it("routes to a per-network custom hub override", async () => {
     const fetchMock = okFetch();
     const config = buildRuntimeConfig({ OBYTE_TESTNET_HUB_ADDRESS: "https://my-testnet.example/api" }, {});

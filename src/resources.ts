@@ -74,6 +74,10 @@ Prefer recommended composite tools for agent-facing tasks:
 - obyte_get_portfolio_summary
 
 Use raw hub tools only when the user asks for exact hub API data or a composite tool does not expose the needed shape.
+
+Amounts and decimals: raw ledger amounts are integers in the asset's smallest units. base is GBYTE with 9 decimals. Composite tools return display_total values already divided by 10^decimals - present those to users. For other amounts, resolve decimals first with obyte_resolve_asset or obyte_get_decimals_by_symbol_or_asset.
+
+Asset holders: asset tools return explorer_asset_url (https://explorer.obyte.org/asset/<symbol-or-asset>, testnet: https://testnetexplorer.obyte.org/asset/<symbol-or-asset>) listing the asset description and holders. Explorer amounts are already in display units - only hub tool outputs need decimals conversion.
 `
   },
   {
@@ -95,10 +99,11 @@ ${JSON.stringify(config, null, 2)}
 
 This server serves both mainnet and testnet. Every tool accepts an optional \`network\` ("mainnet" or "testnet"); when omitted it uses the configured default network. Confirm the network with the user when it is not explicit.
 
-- Explain balances and assets for an address: use \`obyte_analyze_address\`, then \`obyte_resolve_asset\` for non-base assets.
+- Explain balances and assets for an address: use \`obyte_analyze_address\`, then \`obyte_resolve_asset\` for non-base assets. Present \`display_total\` values, not raw integers.
 - Inspect AA trigger failure: use \`obyte_analyze_unit\` and \`obyte_get_aa_response_chain\`.
-- Dry-run an AA trigger on testnet: call \`obyte_prepare_aa_dry_run\` with \`"network":"testnet"\`.
+- Dry-run an AA trigger on testnet: call \`obyte_prepare_aa_dry_run\` with \`"network":"testnet"\`. Convert amounts to smallest units first.
 - Summarize AA state: use \`obyte_analyze_aa\` with a narrow \`state_var_prefix\`.
+- See who holds an asset: resolve it with \`obyte_resolve_asset\` and open its \`explorer_asset_url\`.
 - Check which networks/hubs are active: use \`obyte_get_network_info\`.
 `
   },

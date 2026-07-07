@@ -35,12 +35,13 @@ export async function getAssetBySymbol(client: AaStateVarsReader, symbol: string
 }
 
 export async function getDecimalsBySymbolOrAsset(client: AaStateVarsReader, symbolOrAsset: string, options: SymbolOptions = {}): Promise<number> {
-  const tokenRegistryAddress = requireRegistry(options);
   if (!symbolOrAsset) throw new ObyteMcpError("VALIDATION_ERROR", "symbolOrAsset is undefined");
+  // Base aliases have fixed decimals and must work without a registry (e.g. on testnet).
   if (symbolOrAsset === "base" || symbolOrAsset === "GBYTE") return 9;
   if (symbolOrAsset === "MBYTE") return 6;
   if (symbolOrAsset === "KBYTE") return 3;
   if (symbolOrAsset === "BYTE") return 0;
+  const tokenRegistryAddress = requireRegistry(options);
 
   let asset: string;
   if (symbolOrAsset.length === 44) {

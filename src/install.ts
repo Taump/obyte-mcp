@@ -129,17 +129,36 @@ interface CliRun {
 }
 
 function runCli(command: string, args: string[]): CliRun {
-  const candidates = process.platform === "win32" ? [command, `${command}.cmd`, `${command}.exe`] : [command];
-  for (const bin of candidates) {
-    const result = spawnSync(bin, args, { stdio: "inherit", encoding: "utf8" });
-    if (result.error) {
-      if ((result.error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      return { ok: false, missing: false, message: result.error.message };
+  if (process.platform === "win32") return runCliWindows(command, args);
+  const result = spawnSync(command, args, { stdio: "inherit" });
+  if (result.error) {
+    if ((result.error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { ok: false, missing: true, message: `${command} not found on PATH` };
     }
-    if (result.status === 0) return { ok: true, missing: false, message: "ok" };
-    return { ok: false, missing: false, message: `exited with code ${result.status ?? "unknown"}` };
+    return { ok: false, missing: false, message: result.error.message };
   }
-  return { ok: false, missing: true, message: `${command} not found on PATH` };
+  if (result.status === 0) return { ok: true, missing: false, message: "ok" };
+  return { ok: false, missing: false, message: `exited with code ${result.status ?? "unknown"}` };
+}
+
+function runCliWindows(command: string, args: string[]): CliRun {
+  // npm-installed CLIs (claude, code, codex) are .cmd shims on Windows; modern Node
+  // refuses to spawn them without a shell (CVE-2024-27980). Probe with where.exe,
+  // then run through the shell with cmd-style quoting.
+  const probe = spawnSync("where", [command], { stdio: "ignore" });
+  if (probe.error || probe.status !== 0) {
+    return { ok: false, missing: true, message: `${command} not found on PATH` };
+  }
+  const line = [command, ...args.map(quoteForCmd)].join(" ");
+  const result = spawnSync(line, { stdio: "inherit", shell: true });
+  if (result.error) return { ok: false, missing: false, message: result.error.message };
+  if (result.status === 0) return { ok: true, missing: false, message: "ok" };
+  return { ok: false, missing: false, message: `exited with code ${result.status ?? "unknown"}` };
+}
+
+function quoteForCmd(value: string): string {
+  if (/^[A-Za-z0-9._:\\/=-]+$/.test(value)) return value;
+  return `"${value.replace(/"/g, '\\"')}"`;
 }
 
 export function claudeDesktopConfigPath(): string {

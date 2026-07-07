@@ -1,9 +1,12 @@
 export const PACKAGE_NAME = "obyte-mcp";
-export const PACKAGE_VERSION = "0.1.2";
+export const PACKAGE_VERSION = "0.2.0";
 
 export const MAINNET_HUB = "https://obyte.org/api";
 export const TESTNET_HUB = "https://testnet.obyte.org/api";
 export const MAINNET_TOKEN_REGISTRY_ADDRESS = "O6H6ZIFI57X3PLTYHOCVYPP5A553CYFQ";
+
+export const MAINNET_EXPLORER = "https://explorer.obyte.org";
+export const TESTNET_EXPLORER = "https://testnetexplorer.obyte.org";
 
 export const DEFAULT_TIMEOUT_MS = 20_000;
 export const MIN_TIMEOUT_MS = 1_000;

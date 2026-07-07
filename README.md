@@ -179,6 +179,53 @@ it per call.
 
 Inspect the live configuration for both networks any time with `obyte_get_network_info`.
 
+## Amounts And Decimals
+
+Raw hub data (balances, AA state vars, payment outputs, AA responses) carries amounts as
+**integers in the asset's smallest units**. The base asset has 9 decimals: `2500000000` bytes
+= `2.5 GBYTE`. Agents that skip this step report wrong numbers, so the server enforces it in
+three ways:
+
+- **Composite tools convert for you.** `obyte_analyze_address`, `obyte_analyze_aa`, and
+  `obyte_get_portfolio_summary` return a `totals_by_asset` / `balance_summary` block with
+  `symbol`, `decimals`, `raw_total`, and `display_total` (already divided by `10^decimals`).
+  Assets that cannot be resolved (e.g. no registry on testnet) are listed in
+  `unresolved_assets` with `display_total: null` — never presented as converted.
+- **Server instructions and tool descriptions** tell agents to never show raw integers and to
+  resolve decimals via `obyte_resolve_asset` / `obyte_get_decimals_by_symbol_or_asset` first,
+  and to convert user-facing amounts *into* smallest units when building AA triggers.
+- **Base aliases work without a registry**: decimals for `base`/`GBYTE`/`MBYTE`/`KBYTE`/`BYTE`
+  are answered locally, even on testnet with no registry configured.
+
+Asset pages on the Obyte explorer list the asset description and **current holders**:
+`https://explorer.obyte.org/asset/<symbol|asset>` (testnet:
+`https://testnetexplorer.obyte.org/asset/<symbol|asset>`). Asset tools return this as
+`explorer_asset_url`. Note: explorer amounts are **already in display units** — only hub tool
+outputs need decimals conversion.
+
+## Making Agents Use It Automatically
+
+You should not have to tell your agent to use this server. Two mechanisms make it proactive:
+
+1. **MCP server instructions.** At `initialize` the server sends instructions that hosts
+   (Claude Desktop, Claude Code, and others) inject into the agent's context: use `obyte_*`
+   tools whenever the user mentions Obyte, GBYTE/bytes, autonomous agents, or pastes an Obyte
+   identifier (addresses are 32-character base32 strings; unit hashes and asset ids are
+   44-character base64 strings usually ending in `=`), plus the network and decimals rules.
+2. **Trigger-rich tool descriptions.** Each tool description states when to reach for it, so
+   hosts that only surface descriptions still route correctly.
+
+For hosts that ignore server instructions (or to make it extra reliable in a specific project),
+add a line to your project memory file — `CLAUDE.md` (Claude Code) or `AGENTS.md` (Codex):
+
+```markdown
+For anything involving Obyte, GBYTE, bytes, autonomous agents (AAs), Obyte units/addresses,
+or Obyte token symbols, use the obyte MCP server tools (obyte_analyze_address,
+obyte_analyze_unit, obyte_analyze_aa, obyte_resolve_asset, obyte_get_portfolio_summary,
+obyte_prepare_aa_dry_run) without being asked. Pass network:"testnet" for testnet questions.
+Never show raw smallest-unit amounts: use display_total fields or resolve decimals first.
+```
+
 ## Configuration
 
 Precedence, highest first:
@@ -248,12 +295,12 @@ Check what you are running with `npx -y obyte-mcp --version` and `npx -y obyte-m
 
 Use these first for agent-facing tasks. All accept an optional `network`.
 
-- `obyte_analyze_address`: balances, profile units, definition, attestations, optional history.
+- `obyte_analyze_address`: balances with decimals-aware `balance_summary`, profile units, definition, attestations, optional history.
 - `obyte_analyze_unit`: joint plus optional AA response chain.
-- `obyte_analyze_aa`: AA balances, selected state vars, optional responses.
-- `obyte_resolve_asset`: resolves asset/symbol/decimals in one call.
+- `obyte_analyze_aa`: AA balances with `balance_summary`, selected state vars, optional responses.
+- `obyte_resolve_asset`: resolves asset/symbol/decimals in one call, returns `explorer_asset_url` (holders page).
 - `obyte_prepare_aa_dry_run`: validates and dry-runs an AA trigger.
-- `obyte_get_portfolio_summary`: balances for up to 20 addresses.
+- `obyte_get_portfolio_summary`: balances for up to 20 addresses with `totals_by_asset` display totals.
 
 ## Raw Hub Tools
 
@@ -491,6 +538,7 @@ Ask your MCP client:
 
 - "Check this Obyte address balances on testnet and explain the assets."
 - "Resolve this asset id to symbol and decimals on mainnet."
+- "Who holds this asset?" (resolves it and links the explorer holders page)
 - "Inspect why this AA trigger failed."
 - "Dry-run this AA trigger on testnet."
 - "Summarize AA state vars with this prefix."

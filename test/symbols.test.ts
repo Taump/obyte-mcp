@@ -47,6 +47,13 @@ describe("symbols", () => {
     await expect(getAssetBySymbol(client, "TOK")).rejects.toThrow(/Token registry address/);
   });
 
+  it("returns base alias decimals without any registry", async () => {
+    // Regression: base aliases must work on testnet where no registry is configured.
+    await expect(getDecimalsBySymbolOrAsset(client, "GBYTE")).resolves.toBe(9);
+    await expect(getDecimalsBySymbolOrAsset(client, "base")).resolves.toBe(9);
+    await expect(getDecimalsBySymbolOrAsset(client, "BYTE")).resolves.toBe(0);
+  });
+
   it("resolves asset composite", async () => {
     await expect(resolveAsset(client, "TOK", { configuredRegistryAddress: "REG" })).resolves.toMatchObject({
       input: "TOK",

@@ -2,7 +2,7 @@
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./constants.js";
 import { parseCliArgs } from "./cliArgs.js";
 import { buildRuntimeConfig } from "./config.js";
-import { ObyteMcpError, toObyteMcpError } from "./errors.js";
+import { toObyteMcpError } from "./errors.js";
 import { runDoctor } from "./doctor.js";
 import { runInstall } from "./install.js";
 import { runServer } from "./server.js";
@@ -79,7 +79,6 @@ The default command starts MCP stdio. Do not print logs to stdout in this mode.
 
 main().catch((error: unknown) => {
   const normalized = toObyteMcpError(error);
-  const body = normalized instanceof ObyteMcpError ? normalized : toObyteMcpError(error);
-  process.stderr.write(`${body.code}: ${body.message}\n`);
+  process.stderr.write(`${normalized.code}: ${normalized.message}\n`);
   process.exitCode = 1;
 });
