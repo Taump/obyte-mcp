@@ -1,5 +1,5 @@
 export const PACKAGE_NAME = "obyte-mcp";
-export const PACKAGE_VERSION = "0.1.1";
+export const PACKAGE_VERSION = "0.1.2";
 
 export const MAINNET_HUB = "https://obyte.org/api";
 export const TESTNET_HUB = "https://testnet.obyte.org/api";

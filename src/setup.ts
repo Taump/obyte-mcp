@@ -16,9 +16,15 @@ export async function runSetup(cliOptions: CliOptions, setup: SetupOptions): Pro
   const body = setup.client ? configSnippet(setup.client, config) : allConfigSnippets(config);
   process.stdout.write(`# obyte-mcp setup
 
-Network: ${config.network}
-Hub: ${config.hubAddress}
-Token registry: ${config.tokenRegistryAddress ?? "(not configured)"}
+This one server serves both networks. Every tool takes an optional "network"; it defaults to the network below.
+
+Default network: ${config.defaultNetwork}
+Mainnet hub: ${config.networks.mainnet.hubAddress}
+Testnet hub: ${config.networks.testnet.hubAddress}
+Mainnet token registry: ${config.networks.mainnet.tokenRegistryAddress ?? "(not configured)"}
+Testnet token registry: ${config.networks.testnet.tokenRegistryAddress ?? "(not configured)"}
+
+To apply automatically instead of copying, run: obyte-mcp install
 
 ${body}
 `);

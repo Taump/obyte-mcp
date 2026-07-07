@@ -2,19 +2,19 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.taump/obyte-mcp",
   "title": "Obyte MCP",
-  "description": "Local stdio MCP server for querying Obyte hubs, autonomous agents, balances, units, AA state, AA dry runs, and token symbols.",
+  "description": "Local stdio MCP server that serves both Obyte mainnet and testnet: hubs, autonomous agents, balances, units, AA state, AA dry runs, and token symbols. Each tool takes an optional network.",
   "websiteUrl": "https://github.com/Taump/obyte-mcp",
   "repository": {
     "url": "https://github.com/Taump/obyte-mcp",
     "source": "github"
   },
-  "version": "0.1.1",
+  "version": "0.1.2",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "obyte-mcp",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -23,41 +23,53 @@
         {
           "type": "named",
           "name": "--network",
-          "description": "Obyte network to query.",
+          "description": "Default Obyte network used when a tool call omits the network argument. Both networks stay available regardless.",
           "default": "mainnet",
           "choices": ["mainnet", "testnet"]
         },
         {
           "type": "named",
-          "name": "--hub",
-          "description": "Custom Obyte hub URL. Must be https, except http localhost is allowed for development.",
+          "name": "--mainnet-hub",
+          "description": "Custom mainnet hub URL. Must be https, except http localhost is allowed for development.",
           "isRequired": false
         },
         {
           "type": "named",
-          "name": "--token-registry",
-          "description": "Token registry AA address. Mainnet has a default; testnet symbol lookups need an explicit registry when used.",
+          "name": "--testnet-hub",
+          "description": "Custom testnet hub URL. Must be https, except http localhost is allowed for development.",
+          "isRequired": false
+        },
+        {
+          "type": "named",
+          "name": "--testnet-token-registry",
+          "description": "Testnet token registry AA address. Testnet symbol lookups need an explicit registry when used.",
           "isRequired": false
         }
       ],
       "environmentVariables": [
         {
           "name": "OBYTE_NETWORK",
-          "description": "Obyte network to query.",
+          "description": "Default Obyte network used when a tool call omits the network argument. Both networks stay available.",
           "default": "mainnet",
           "choices": ["mainnet", "testnet"],
           "isRequired": false,
           "isSecret": false
         },
         {
-          "name": "OBYTE_HUB_ADDRESS",
-          "description": "Custom Obyte hub URL. Must be https, except http localhost is allowed for development.",
+          "name": "OBYTE_MAINNET_HUB_ADDRESS",
+          "description": "Custom mainnet hub URL. Must be https, except http localhost is allowed for development.",
           "isRequired": false,
           "isSecret": false
         },
         {
-          "name": "OBYTE_TOKEN_REGISTRY_ADDRESS",
-          "description": "Token registry AA address for symbol and decimals lookups.",
+          "name": "OBYTE_TESTNET_HUB_ADDRESS",
+          "description": "Custom testnet hub URL. Must be https, except http localhost is allowed for development.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OBYTE_TESTNET_TOKEN_REGISTRY_ADDRESS",
+          "description": "Testnet token registry AA address for symbol and decimals lookups.",
           "isRequired": false,
           "isSecret": false
         }

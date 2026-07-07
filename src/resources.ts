@@ -93,10 +93,13 @@ ${JSON.stringify(config, null, 2)}
     title: "Common Obyte Agent Tasks",
     text: () => `# Common Tasks
 
+This server serves both mainnet and testnet. Every tool accepts an optional \`network\` ("mainnet" or "testnet"); when omitted it uses the configured default network. Confirm the network with the user when it is not explicit.
+
 - Explain balances and assets for an address: use \`obyte_analyze_address\`, then \`obyte_resolve_asset\` for non-base assets.
 - Inspect AA trigger failure: use \`obyte_analyze_unit\` and \`obyte_get_aa_response_chain\`.
-- Dry-run an AA trigger on testnet: run server with \`--network testnet\`, then use \`obyte_prepare_aa_dry_run\`.
+- Dry-run an AA trigger on testnet: call \`obyte_prepare_aa_dry_run\` with \`"network":"testnet"\`.
 - Summarize AA state: use \`obyte_analyze_aa\` with a narrow \`state_var_prefix\`.
+- Check which networks/hubs are active: use \`obyte_get_network_info\`.
 `
   },
   {

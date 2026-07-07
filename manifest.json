@@ -1,0 +1,61 @@
+{
+  "manifest_version": "0.3",
+  "name": "obyte-mcp",
+  "display_name": "Obyte MCP",
+  "version": "0.1.2",
+  "description": "Query Obyte mainnet and testnet hubs: balances, units, autonomous agents, AA state, AA dry runs, and token symbols.",
+  "long_description": "Local stdio MCP server that serves both Obyte networks at once. Every tool accepts an optional \"network\" (\"mainnet\" or \"testnet\"); when omitted it uses the default network configured below. Read/query/dry-run only: it is not a wallet, signer, or broadcaster and never needs private keys.",
+  "author": {
+    "name": "Taump",
+    "url": "https://github.com/Taump"
+  },
+  "homepage": "https://github.com/Taump/obyte-mcp",
+  "documentation": "https://github.com/Taump/obyte-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Taump/obyte-mcp"
+  },
+  "license": "MIT",
+  "keywords": ["obyte", "mcp", "model-context-protocol", "autonomous-agents", "blockchain"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {
+        "OBYTE_NETWORK": "${user_config.default_network}",
+        "OBYTE_TESTNET_TOKEN_REGISTRY_ADDRESS": "${user_config.testnet_token_registry}"
+      }
+    }
+  },
+  "tools": [
+    { "name": "obyte_analyze_address", "description": "Balances, definition, profile units, attestations, and optional history for an address." },
+    { "name": "obyte_analyze_unit", "description": "Fetch a unit joint and optionally follow its AA response chain." },
+    { "name": "obyte_analyze_aa", "description": "AA balances, selected state vars, and optional AA responses." },
+    { "name": "obyte_resolve_asset", "description": "Resolve an asset id or token symbol to asset, symbol, and decimals." },
+    { "name": "obyte_prepare_aa_dry_run", "description": "Validate and dry-run an AA trigger without signing or broadcasting." },
+    { "name": "obyte_get_portfolio_summary", "description": "Balances for up to 20 addresses in one call." }
+  ],
+  "user_config": {
+    "default_network": {
+      "type": "string",
+      "title": "Default network",
+      "description": "Network used when a tool call does not specify one. Both networks stay available regardless. Use \"mainnet\" or \"testnet\".",
+      "required": false,
+      "default": "mainnet"
+    },
+    "testnet_token_registry": {
+      "type": "string",
+      "title": "Testnet token registry AA (optional)",
+      "description": "Token registry AA address used for testnet symbol lookups. Leave empty on mainnet-only usage.",
+      "required": false,
+      "default": ""
+    }
+  },
+  "compatibility": {
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}

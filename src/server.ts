@@ -2,11 +2,11 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./constants.js";
 import { writeDiagnostic } from "./diagnostics.js";
-import { ObyteHttpClient } from "./obyteClient.js";
+import { ObyteHttpClient, toClientConfig } from "./obyteClient.js";
 import { registerObytePrompts } from "./prompts.js";
 import { registerObyteResources } from "./resources.js";
 import { registerObyteTools } from "./tools.js";
-import type { RuntimeConfig } from "./types.js";
+import type { Network, RuntimeConfig } from "./types.js";
 
 export async function runServer(config: RuntimeConfig): Promise<void> {
   const handle = serveStdio(
@@ -15,8 +15,11 @@ export async function runServer(config: RuntimeConfig): Promise<void> {
         name: PACKAGE_NAME,
         version: PACKAGE_VERSION
       });
-      const client = new ObyteHttpClient(config);
-      registerObyteTools(server, client, config);
+      const clients: Record<Network, ObyteHttpClient> = {
+        mainnet: new ObyteHttpClient(toClientConfig(config, "mainnet")),
+        testnet: new ObyteHttpClient(toClientConfig(config, "testnet"))
+      };
+      registerObyteTools(server, clients, config);
       registerObyteResources(server, config);
       registerObytePrompts(server);
       return server;

@@ -1,8 +1,8 @@
 {
   "name": "obyte-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "mcpName": "io.github.taump/obyte-mcp",
-  "description": "Local stdio MCP server for querying Obyte hubs.",
+  "description": "Local stdio MCP server for querying Obyte mainnet and testnet hubs.",
   "type": "module",
   "bin": {
     "obyte-mcp": "dist/index.js"
@@ -21,6 +21,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "setup": "node dist/index.js setup",
+    "register": "node dist/index.js install",
+    "bundle": "npm run build && npx -y @anthropic-ai/mcpb pack . obyte-mcp.mcpb",
     "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "keywords": [

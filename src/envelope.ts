@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { ObyteMcpError, toObyteMcpError } from "./errors.js";
 import { sortKnownMapOutputs } from "./jsonUtils.js";
-import type { RuntimeConfig, ToolEnvelope, ToolExecutionContext } from "./types.js";
+import type { EnvelopeConfig, ToolEnvelope, ToolExecutionContext } from "./types.js";
 
-export function createToolContext(config: RuntimeConfig, toolName: string): ToolExecutionContext {
+export function createToolContext(config: EnvelopeConfig, toolName: string): ToolExecutionContext {
   return {
     config,
     requestId: randomUUID(),
@@ -174,7 +174,7 @@ function isTerminalTruncation(value: unknown): boolean {
 }
 
 export async function executeEnvelope<T>(
-  config: RuntimeConfig,
+  config: EnvelopeConfig,
   toolName: string,
   retryCounter: () => number,
   handler: (context: ToolExecutionContext) => Promise<T>

@@ -1,8 +1,8 @@
 # obyte-mcp
 
-Local stdio MCP server for querying Obyte hubs from AI tools.
+Local stdio MCP server for querying Obyte from AI tools. **One server serves both mainnet and testnet** — every tool takes an optional `network`, so you never run two servers.
 
-`obyte-mcp` exposes Obyte hub reads, autonomous-agent inspection, AA dry runs, and token symbol helpers to MCP clients such as Codex, Claude Desktop, and Claude Code.
+`obyte-mcp` exposes Obyte hub reads, autonomous-agent inspection, AA dry runs, and token symbol helpers to MCP clients such as VS Code, Codex, Claude Desktop, and Claude Code.
 
 Official Obyte docs:
 
@@ -12,7 +12,7 @@ Official Obyte docs:
 ## What This Is
 
 - A local MCP server that talks over stdio only.
-- A read/query/dry-run connector for Obyte mainnet or testnet hubs.
+- A read/query/dry-run connector for Obyte **mainnet and testnet at the same time**.
 - A toolset for balances, units, witnesses, AA state vars, AA getters, AA dry runs, token symbols, and agent-friendly summaries.
 
 ## What This Is Not
@@ -33,185 +33,220 @@ The server uses stdio only. It does not start an HTTP server and does not listen
 
 ## Quick Start
 
-Run on mainnet:
+Run it (serves both networks):
 
 ```bash
-npx -y obyte-mcp --network mainnet
+npx -y obyte-mcp
 ```
 
-Run on testnet:
+Make testnet the default network for calls that omit `network` (both stay available):
 
 ```bash
 npx -y obyte-mcp --network testnet
 ```
 
-Interactive setup wizard:
+## Install (one command)
+
+The fastest way to register the server with your clients. It runs each client's own CLI
+(`code --add-mcp`, `codex mcp add`, `claude mcp add`) and writes the Claude Desktop config
+file directly. When a client CLI is missing, it prints the exact manual steps instead.
+
+Preview first (changes nothing):
 
 ```bash
-npx -y obyte-mcp setup
+npx -y obyte-mcp install --dry-run
 ```
 
-Non-interactive config printing:
+Install into every detected client:
 
 ```bash
-npx -y obyte-mcp setup --print-only --client codex --network mainnet
-npx -y obyte-mcp setup --print-only --client claude-desktop --network testnet
-npx -y obyte-mcp setup --print-only --client claude-code --network mainnet
+npx -y obyte-mcp install
 ```
 
-Doctor:
+Target a single client, or set the default network:
 
 ```bash
-npx -y obyte-mcp doctor
-npx -y obyte-mcp doctor --json
+npx -y obyte-mcp install --client vscode
+npx -y obyte-mcp install --client claude-desktop --network testnet
+npx -y obyte-mcp install --client codex --name obyte-testnet --network testnet
 ```
+
+Flags: `--client vscode|codex|claude-desktop|claude-code` (default: all), `--name NAME`
+(server name, default `obyte`), `--dry-run`, plus any config flag from the table below.
+
+From a checkout you can use the wrapper scripts (they build first if needed):
+
+```bash
+./scripts/install.sh --dry-run          # macOS / Linux
+pwsh ./scripts/install.ps1 --dry-run    # Windows
+```
+
+Prefer copy-paste? `npx -y obyte-mcp setup` prints ready snippets for all clients without
+changing anything (add `--print-only --client <name>` for one).
+
+### VS Code
+
+`obyte-mcp install --client vscode` runs `code --add-mcp` for you. To do it by hand, add to
+`.vscode/mcp.json` (workspace) or your user `settings.json` under `"mcp"`:
+
+```json
+{
+  "servers": {
+    "obyte": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "obyte-mcp"]
+    }
+  }
+}
+```
+
+VS Code uses `servers` (not `mcpServers`) and requires `"type": "stdio"`.
+
+### Codex CLI
+
+`obyte-mcp install --client codex` runs `codex mcp add`. To do it by hand, add to
+`~/.codex/config.toml` (Codex uses TOML, not JSON):
+
+```toml
+[mcp_servers.obyte]
+command = "npx"
+args = ["-y", "obyte-mcp"]
+```
+
+### Claude Desktop
+
+Claude Desktop has no CLI, so `obyte-mcp install --client claude-desktop` edits its config
+file directly (it backs up the existing file to `*.bak` and merges, keeping your other
+servers). To do it by hand, edit `claude_desktop_config.json` and restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "obyte": {
+      "command": "npx",
+      "args": ["-y", "obyte-mcp"]
+    }
+  }
+}
+```
+
+Config paths:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+### Claude Code
+
+`obyte-mcp install --client claude-code` runs:
+
+```bash
+claude mcp add --transport stdio obyte -- npx -y obyte-mcp
+```
+
+The `--` before `npx` is required. Without it, Claude Code can parse server flags such as
+`--network` as Claude Code flags. Useful commands: `claude mcp list`, `claude mcp get obyte`,
+and `/mcp` inside Claude Code.
+
+### One-click bundle (.mcpb) for Claude Desktop / Claude Code
+
+Anthropic's [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) format (`.mcpb`, formerly
+`.dxt`) lets users install with a single click in Claude Desktop, Claude Code, and MCP for
+Windows (VS Code and Codex do not support `.mcpb`). This repo ships a `manifest.json`. Build a
+bundle with:
+
+```bash
+npm ci --omit=dev   # keep the bundle small (runtime deps only)
+npm run bundle      # builds, then runs `mcpb pack` -> obyte-mcp.mcpb
+```
+
+Then open `obyte-mcp.mcpb` in Claude Desktop and click Install. The bundle exposes a
+"Default network" option and an optional testnet token registry in the install UI.
+
+## Choosing A Network
+
+This is the headline feature: **you do not pick a network when starting the server** — you pick
+it per call.
+
+- Every tool accepts an optional `network` argument: `"mainnet"` or `"testnet"`.
+- When a call omits `network`, the server uses the **default network** (mainnet unless you set
+  `--network testnet` / `OBYTE_NETWORK=testnet`).
+- The response `meta.network` and `meta.hub` always tell you which network actually answered.
+- Ask your client things like *"check this balance on testnet"* or *"dry-run this AA on mainnet"*
+  and it will pass the right `network`. If the network is ambiguous, tools are documented to ask
+  you first.
+
+Inspect the live configuration for both networks any time with `obyte_get_network_info`.
 
 ## Configuration
 
-Precedence is:
+Precedence, highest first:
 
-1. Environment variables
-2. CLI flags
-3. Defaults
+1. Per-network environment variable (e.g. `OBYTE_TESTNET_HUB_ADDRESS`)
+2. Per-network CLI flag (e.g. `--testnet-hub`)
+3. Plain environment variable / CLI flag (applies to the **default** network only)
+4. Built-in default
 
-| Env var | CLI flag | Default | Description |
-| --- | --- | --- | --- |
-| `OBYTE_NETWORK` | `--network` | `mainnet` | `mainnet` or `testnet` |
-| `OBYTE_HUB_ADDRESS` | `--hub` | Network default | Custom hub URL |
-| `OBYTE_TOKEN_REGISTRY_ADDRESS` | `--token-registry` | Mainnet registry on mainnet, unset on testnet | Token registry AA |
-| `OBYTE_REQUEST_TIMEOUT_MS` | `--timeout-ms` | `20000` | Hub request timeout, `1000..120000` |
-| `OBYTE_MAX_CONCURRENCY` | `--max-concurrency` | `4` | Concurrent hub requests, `1..10` |
-| `OBYTE_MAX_OUTPUT_BYTES` | `--max-output-bytes` | `262144` | Max tool output bytes, `16384..1048576` |
+| Env var | CLI flag | Applies to | Default | Description |
+| --- | --- | --- | --- | --- |
+| `OBYTE_NETWORK` | `--network` | default network | `mainnet` | Network used when a call omits `network` |
+| `OBYTE_HUB_ADDRESS` | `--hub` | default network | Network default | Custom hub URL |
+| `OBYTE_TOKEN_REGISTRY_ADDRESS` | `--token-registry` | default network | Mainnet registry / unset | Token registry AA |
+| `OBYTE_MAINNET_HUB_ADDRESS` | `--mainnet-hub` | mainnet | `https://obyte.org/api` | Custom mainnet hub |
+| `OBYTE_TESTNET_HUB_ADDRESS` | `--testnet-hub` | testnet | `https://testnet.obyte.org/api` | Custom testnet hub |
+| `OBYTE_MAINNET_TOKEN_REGISTRY_ADDRESS` | `--mainnet-token-registry` | mainnet | Official registry | Mainnet registry AA |
+| `OBYTE_TESTNET_TOKEN_REGISTRY_ADDRESS` | `--testnet-token-registry` | testnet | unset | Testnet registry AA |
+| `OBYTE_REQUEST_TIMEOUT_MS` | `--timeout-ms` | both | `20000` | Hub request timeout, `1000..120000` |
+| `OBYTE_MAX_CONCURRENCY` | `--max-concurrency` | both | `4` | Concurrent hub requests, `1..10` |
+| `OBYTE_MAX_OUTPUT_BYTES` | `--max-output-bytes` | both | `262144` | Max tool output bytes, `16384..1048576` |
 
 Default hubs:
 
 - Mainnet: `https://obyte.org/api`
 - Testnet: `https://testnet.obyte.org/api`
 
-Custom hub URL policy:
+Custom hub URL policy (applies to any hub override):
 
 - `https:` is allowed.
 - `http:` is allowed only for `localhost`, `127.0.0.1`, and `::1`.
 - URL credentials are rejected.
 - Non-HTTP protocols are rejected.
 
-## Install In Codex
+## Updating
 
-Add a local stdio MCP server config with `npx`:
+The server runs through `npx`, which resolves the latest published version. How to move to a
+newer release depends on how it is registered:
 
-```json
-{
-  "mcpServers": {
-    "obyte": {
-      "command": "npx",
-      "args": ["-y", "obyte-mcp", "--network", "mainnet"]
-    }
-  }
-}
-```
+- **npx-based configs (default in every snippet above).** `npx` caches packages. Clear the cache
+  so the next launch fetches the newest version, then restart the client:
 
-Testnet:
+  ```bash
+  npx -y obyte-mcp@latest --version     # fetch + print the newest version
+  npm cache clean --force               # optional: force-drop the npx cache
+  ```
 
-```json
-{
-  "mcpServers": {
-    "obyte-testnet": {
-      "command": "npx",
-      "args": ["-y", "obyte-mcp", "--network", "testnet"]
-    }
-  }
-}
-```
+  You can also pin a version in your config, e.g. `["-y", "obyte-mcp@0.1.2"]`, and bump it when
+  you want to update.
 
-With a custom testnet token registry:
+- **Claude Desktop / Claude Code / VS Code / Codex.** Nothing to re-register — they call the same
+  `npx` command. Just refresh the package as above and restart the client. To re-run the
+  installer (for example after changing flags), use `--name` to overwrite the same entry:
 
-```json
-{
-  "mcpServers": {
-    "obyte-testnet": {
-      "command": "npx",
-      "args": ["-y", "obyte-mcp", "--network", "testnet", "--token-registry", "YOUR_TESTNET_REGISTRY_AA"]
-    }
-  }
-}
-```
+  ```bash
+  npx -y obyte-mcp@latest install
+  ```
 
-Version-tested note: this README should be updated before each release with the exact Codex version used for smoke testing. Other Codex versions may work if they support local stdio MCP servers.
+- **`.mcpb` bundle.** Rebuild the bundle from the new source (`npm ci --omit=dev && npm run
+  bundle`) and re-install the new `obyte-mcp.mcpb` in Claude; it replaces the previous version.
 
-## Install In Claude Desktop
+- **Global install (if you used `npm i -g obyte-mcp`).** `npm update -g obyte-mcp`.
 
-Edit `claude_desktop_config.json`.
-
-Common paths:
-
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-- Linux: `~/.config/Claude/claude_desktop_config.json`
-
-Mainnet:
-
-```json
-{
-  "mcpServers": {
-    "obyte": {
-      "command": "npx",
-      "args": ["-y", "obyte-mcp", "--network", "mainnet"]
-    }
-  }
-}
-```
-
-Testnet:
-
-```json
-{
-  "mcpServers": {
-    "obyte-testnet": {
-      "command": "npx",
-      "args": ["-y", "obyte-mcp", "--network", "testnet"]
-    }
-  }
-}
-```
-
-Restart Claude Desktop after editing the config.
-
-Version-tested note: this README should be updated before each release with the exact Claude Desktop version used for smoke testing. Other versions may work if they support local stdio MCP servers.
-
-## Install In Claude Code
-
-Mainnet:
-
-```bash
-claude mcp add --transport stdio obyte -- npx -y obyte-mcp --network mainnet
-```
-
-Testnet:
-
-```bash
-claude mcp add --transport stdio obyte-testnet -- npx -y obyte-mcp --network testnet
-```
-
-The `--` before `npx` is required. Without it, Claude Code can parse `obyte-mcp` flags such as `--network` as Claude Code flags instead of server flags.
-
-Useful Claude Code commands:
-
-```bash
-claude mcp list
-claude mcp get obyte
-```
-
-Inside Claude Code, use:
-
-```text
-/mcp
-```
-
-Version-tested note: this README should be updated before each release with the exact Claude Code version used for smoke testing. Other versions may work if they support local stdio MCP servers.
+Check what you are running with `npx -y obyte-mcp --version` and `npx -y obyte-mcp doctor`.
 
 ## Recommended Tools
 
-Use these first for agent-facing tasks:
+Use these first for agent-facing tasks. All accept an optional `network`.
 
 - `obyte_analyze_address`: balances, profile units, definition, attestations, optional history.
 - `obyte_analyze_unit`: joint plus optional AA response chain.
@@ -222,9 +257,9 @@ Use these first for agent-facing tasks:
 
 ## Raw Hub Tools
 
-Advanced tools that mirror Obyte hub/client methods:
+Advanced tools that mirror Obyte hub/client methods (each accepts an optional `network`):
 
-- `obyte_get_network_info`
+- `obyte_get_network_info` (returns config for **both** networks)
 - `obyte_get_last_mci`
 - `obyte_get_peers`
 - `obyte_get_witnesses`
@@ -264,15 +299,17 @@ Mainnet default token registry:
 O6H6ZIFI57X3PLTYHOCVYPP5A553CYFQ
 ```
 
-On testnet, pass a registry explicitly if you need symbol lookups:
+On testnet, configure a registry if you need symbol lookups (or pass `token_registry_address`
+per call):
 
 ```bash
-npx -y obyte-mcp --network testnet --token-registry YOUR_TESTNET_REGISTRY_AA
+npx -y obyte-mcp --testnet-token-registry YOUR_TESTNET_REGISTRY_AA
 ```
 
 ## Tool Behavior
 
-All tool responses are JSON text envelopes.
+All tool responses are JSON text envelopes. `meta.network` and `meta.hub` report the network
+that answered the call.
 
 Success:
 
@@ -280,8 +317,8 @@ Success:
 {
   "ok": true,
   "meta": {
-    "network": "mainnet",
-    "hub": "https://obyte.org/api",
+    "network": "testnet",
+    "hub": "https://testnet.obyte.org/api",
     "tool": "obyte_get_balances",
     "request_id": "...",
     "duration_ms": 123,
@@ -331,7 +368,7 @@ Error codes:
 - Oracle arrays: max `10`
 - State var prefix: max `128` characters
 - Generic JSON payloads: max `64KB`
-- All object schemas are strict and reject unknown fields
+- All object schemas are strict and reject unknown fields (except the optional `network`)
 
 ## Output Limits And Truncation
 
@@ -370,7 +407,7 @@ Witnesses are cached:
 
 - In memory only
 - Per process
-- Per `network + hub`
+- Per `network + hub` (so mainnet and testnet caches are independent)
 - TTL: `10 minutes`
 
 `obyte_get_witnesses` accepts `update=true` to force refresh. `obyte_get_history` uses cached witnesses unless explicit witnesses are passed or `update_witnesses=true`.
@@ -424,18 +461,7 @@ Diagnostics are written to stderr as JSON Lines:
 {"ts":"2026-07-07T12:00:00.000Z","package":"obyte-mcp","level":"error","event":"mcp_stdio_error","message":"..."}
 ```
 
-Fields:
-
-- `ts`
-- `package`
-- `level`
-- `event`
-- `request_id`
-- `tool`
-- `message`
-- `details`
-
-`setup`, `doctor`, `--help`, and `--version` do not start MCP stdio and can write normal output to stdout.
+`install`, `setup`, `doctor`, `--help`, and `--version` do not start MCP stdio and can write normal output to stdout.
 
 ## Resources
 
@@ -463,8 +489,8 @@ The server exposes:
 
 Ask your MCP client:
 
-- "Check this Obyte address balances and explain the assets."
-- "Resolve this asset id to symbol and decimals."
+- "Check this Obyte address balances on testnet and explain the assets."
+- "Resolve this asset id to symbol and decimals on mainnet."
 - "Inspect why this AA trigger failed."
 - "Dry-run this AA trigger on testnet."
 - "Summarize AA state vars with this prefix."
@@ -475,7 +501,7 @@ Ask your MCP client:
 Run against the published package:
 
 ```bash
-npx -y @modelcontextprotocol/inspector npx -y obyte-mcp --network mainnet
+npx -y @modelcontextprotocol/inspector npx -y obyte-mcp
 ```
 
 Run against a local build:
@@ -483,36 +509,26 @@ Run against a local build:
 ```bash
 npm install
 npm run build
-npx -y @modelcontextprotocol/inspector node dist/index.js --network mainnet
+npx -y @modelcontextprotocol/inspector node dist/index.js
 ```
 
-## Directory Listings
+## Distribution And Directory Listings
 
-### MCP.Directory
+There is no single official CLI that installs an MCP server into every client at once. The
+official building blocks from https://github.com/modelcontextprotocol are:
 
-Submit the server at:
+- **MCP Registry** (`server.json` + `mcp-publisher`): discovery and distribution. Registry-aware
+  clients and directories generate per-client install configs from it.
+- **MCP Bundles** (`.mcpb`): one-click local install for Claude Desktop / Claude Code / MCP for
+  Windows (see the bundle section above).
 
-```text
-https://mcp.directory/submit
-```
-
-Use:
-
-- GitHub Repository URL: `https://github.com/Taump/obyte-mcp`
-- npm Package: `obyte-mcp`
-- Short Description:
-
-```text
-Local stdio MCP server for querying Obyte hubs, autonomous agents, balances, AA state, AA dry runs, and token symbols.
-```
-
-MCP.Directory says it auto-pulls metadata from GitHub, detects tools from the MCP implementation, generates install configurations for major clients, reviews the submission, and publishes it to the directory. Make sure the GitHub repository is pushed and the README is current before submitting.
+The `obyte-mcp install` command covers the remaining gap by driving each client's own CLI so one
+command reaches VS Code, Codex, Claude Desktop, and Claude Code.
 
 ### Official MCP Registry
 
-The official registry hosts metadata, not package artifacts. The npm package must already be published, and npm ownership is verified through the `mcpName` field in `package.json`.
-
-This package uses:
+The registry hosts metadata, not package artifacts. The npm package must already be published,
+and npm ownership is verified through the `mcpName` field in `package.json`:
 
 ```json
 {
@@ -520,20 +536,15 @@ This package uses:
 }
 ```
 
-The matching registry metadata is in `server.json`.
-
-Because `0.1.0` was published before `mcpName` was added, publish a new npm version first:
+The matching registry metadata is in `server.json`. Publish a new npm version, then use
+`mcp-publisher`:
 
 ```bash
 npm run typecheck
 npm test
 npm run build
 npm publish
-```
 
-Then install and use `mcp-publisher`:
-
-```bash
 # macOS/Linux via release tarball
 curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 sudo mv mcp-publisher /usr/local/bin/
@@ -564,14 +575,15 @@ node dist/index.js --help
 
 Project structure:
 
-- `src/index.ts`: CLI entrypoint
-- `src/server.ts`: stdio MCP runtime
+- `src/index.ts`: CLI entrypoint (server / install / setup / doctor)
+- `src/cliArgs.ts`: argument parsing
+- `src/config.ts`: dual-network runtime config and URL policy
+- `src/server.ts`: stdio MCP runtime (one hub client per network)
 - `src/obyteClient.ts`: Obyte hub HTTP client
-- `src/tools.ts`: MCP tool registration
-- `src/resources.ts`: MCP resources
-- `src/prompts.ts`: MCP prompts
-- `src/symbols.ts`: symbol/asset helpers
-- `src/config.ts`: runtime config and URL policy
+- `src/tools.ts`: MCP tool registration and per-call network routing
+- `src/install.ts`: client CLI installer / Claude Desktop config writer
+- `src/configSnippets.ts`: per-client config and command builders
+- `src/resources.ts`, `src/prompts.ts`, `src/symbols.ts`, `src/schemas.ts`
 
 ## Compatibility Matrix
 
@@ -580,14 +592,13 @@ Project structure:
 | Node.js | `>=20` |
 | MCP SDK | `@modelcontextprotocol/server@^2.0.0-beta.2` |
 | Transport | Local stdio only |
-| Codex | Local stdio MCP, version-tested note to be updated per release |
-| Claude Desktop | Local stdio MCP, version-tested note to be updated per release |
-| Claude Code | Local stdio MCP, version-tested note to be updated per release |
-| macOS | Supported |
-| Linux | Supported |
+| VS Code | `code --add-mcp` / `.vscode/mcp.json` |
+| Codex CLI | `codex mcp add` / `~/.codex/config.toml` |
+| Claude Desktop | config file / `.mcpb` bundle |
+| Claude Code | `claude mcp add` / `.mcpb` bundle |
+| macOS / Linux | Supported |
 | Windows | Supported when Node/npx are available in the client environment |
-| Obyte mainnet | Supported |
-| Obyte testnet | Supported |
+| Obyte mainnet + testnet | Both served simultaneously |
 | Custom hub | HTTPS only, plus localhost HTTP for development |
 
 ## Release Checklist
@@ -605,13 +616,10 @@ npx -y ./obyte-mcp-*.tgz --help
 Also:
 
 - Test the packed tarball with MCP Inspector.
-- Test Codex config.
-- Test Claude Desktop config.
-- Test Claude Code command with the required `--`.
-- Publish npm version containing `mcpName`.
+- Test `obyte-mcp install --dry-run` for each client.
+- Verify VS Code, Codex, Claude Desktop, and Claude Code configs.
+- Build and install the `.mcpb` bundle in Claude Desktop.
+- Publish an npm version containing `mcpName`.
 - Publish `server.json` to the Official MCP Registry with `mcp-publisher`.
-- Submit `https://github.com/Taump/obyte-mcp` and npm package `obyte-mcp` to MCP.Directory.
-- Update version-tested notes in this README.
 - Verify README examples match actual CLI output.
-- Publish with npm provenance if available.
 - Create a GitHub release with changelog and compatibility notes.

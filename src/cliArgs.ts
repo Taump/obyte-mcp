@@ -2,8 +2,10 @@ import { ObyteMcpError } from "./errors.js";
 import { parseNetwork } from "./config.js";
 import type { CliOptions, Network } from "./types.js";
 
-export type CommandName = "server" | "setup" | "doctor" | "help" | "version";
-export type ClientName = "codex" | "claude-desktop" | "claude-code";
+export type CommandName = "server" | "setup" | "install" | "doctor" | "help" | "version";
+export type ClientName = "codex" | "claude-desktop" | "claude-code" | "vscode";
+
+export const CLIENT_NAMES: readonly ClientName[] = ["vscode", "codex", "claude-desktop", "claude-code"];
 
 export interface ParsedCli {
   command: CommandName;
@@ -11,6 +13,11 @@ export interface ParsedCli {
   setup: {
     printOnly: boolean;
     client?: ClientName;
+  };
+  install: {
+    dryRun: boolean;
+    client?: ClientName;
+    serverName?: string;
   };
   doctor: {
     json: boolean;
@@ -22,12 +29,13 @@ export function parseCliArgs(argv: string[]): ParsedCli {
     command: "server",
     options: {},
     setup: { printOnly: false },
+    install: { dryRun: false },
     doctor: { json: false }
   };
 
   const args = [...argv];
   const first = args[0];
-  if (first === "setup" || first === "doctor") {
+  if (first === "setup" || first === "install" || first === "doctor") {
     parsed.command = first;
     args.shift();
   } else if (first === "--help" || first === "-h" || first === "help") {
@@ -44,6 +52,10 @@ export function parseCliArgs(argv: string[]): ParsedCli {
 
     if (arg === "--print-only") {
       parsed.setup.printOnly = true;
+      continue;
+    }
+    if (arg === "--dry-run") {
+      parsed.install.dryRun = true;
       continue;
     }
     if (arg === "--json") {
@@ -67,6 +79,26 @@ export function parseCliArgs(argv: string[]): ParsedCli {
       index += 1;
       continue;
     }
+    if (arg === "--mainnet-hub") {
+      parsed.options.mainnetHubAddress = requireString(next, "--mainnet-hub");
+      index += 1;
+      continue;
+    }
+    if (arg === "--testnet-hub") {
+      parsed.options.testnetHubAddress = requireString(next, "--testnet-hub");
+      index += 1;
+      continue;
+    }
+    if (arg === "--mainnet-token-registry") {
+      parsed.options.mainnetTokenRegistryAddress = requireString(next, "--mainnet-token-registry");
+      index += 1;
+      continue;
+    }
+    if (arg === "--testnet-token-registry") {
+      parsed.options.testnetTokenRegistryAddress = requireString(next, "--testnet-token-registry");
+      index += 1;
+      continue;
+    }
     if (arg === "--timeout-ms") {
       parsed.options.timeoutMs = parseInteger(requireString(next, "--timeout-ms"), "--timeout-ms");
       index += 1;
@@ -83,7 +115,14 @@ export function parseCliArgs(argv: string[]): ParsedCli {
       continue;
     }
     if (arg === "--client") {
-      parsed.setup.client = parseClient(requireString(next, "--client"));
+      const client = parseClient(requireString(next, "--client"));
+      parsed.setup.client = client;
+      parsed.install.client = client;
+      index += 1;
+      continue;
+    }
+    if (arg === "--name") {
+      parsed.install.serverName = requireString(next, "--name");
       index += 1;
       continue;
     }
@@ -111,6 +150,6 @@ function parseInteger(value: string, label: string): number {
 }
 
 function parseClient(value: string): ClientName {
-  if (value === "codex" || value === "claude-desktop" || value === "claude-code") return value;
-  throw new ObyteMcpError("CONFIG_ERROR", "--client must be codex, claude-desktop, or claude-code", { value });
+  if (value === "codex" || value === "claude-desktop" || value === "claude-code" || value === "vscode") return value;
+  throw new ObyteMcpError("CONFIG_ERROR", "--client must be vscode, codex, claude-desktop, or claude-code", { value });
 }

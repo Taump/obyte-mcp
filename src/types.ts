@@ -1,4 +1,5 @@
 export type Network = "mainnet" | "testnet";
+export type ConfigSource = "env" | "cli" | "default";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
@@ -16,27 +17,43 @@ export type ErrorCode =
   | "SECRET_INPUT_REJECTED"
   | "INTERNAL_ERROR";
 
-export interface RuntimeConfig {
+export interface NetworkConfig {
   network: Network;
   hubAddress: string;
   tokenRegistryAddress: string | undefined;
+  hubSource: ConfigSource;
+  tokenRegistrySource: ConfigSource | "unset";
+}
+
+export interface RuntimeConfig {
+  defaultNetwork: Network;
+  defaultNetworkSource: ConfigSource;
+  networks: Record<Network, NetworkConfig>;
   timeoutMs: number;
   maxConcurrency: number;
   maxOutputBytes: number;
-  source: {
-    network: "env" | "cli" | "default";
-    hubAddress: "env" | "cli" | "default";
-    tokenRegistryAddress: "env" | "cli" | "default" | "unset";
-    timeoutMs: "env" | "cli" | "default";
-    maxConcurrency: "env" | "cli" | "default";
-    maxOutputBytes: "env" | "cli" | "default";
+  limitsSource: {
+    timeoutMs: ConfigSource;
+    maxConcurrency: ConfigSource;
+    maxOutputBytes: ConfigSource;
   };
+}
+
+/** Minimal per-call view used when building the response envelope. */
+export interface EnvelopeConfig {
+  network: Network;
+  hubAddress: string;
+  maxOutputBytes: number;
 }
 
 export interface CliOptions {
   network?: Network | undefined;
   hubAddress?: string | undefined;
   tokenRegistryAddress?: string | undefined;
+  mainnetHubAddress?: string | undefined;
+  testnetHubAddress?: string | undefined;
+  mainnetTokenRegistryAddress?: string | undefined;
+  testnetTokenRegistryAddress?: string | undefined;
   timeoutMs?: number | undefined;
   maxConcurrency?: number | undefined;
   maxOutputBytes?: number | undefined;
@@ -74,7 +91,7 @@ export interface ErrorEnvelope {
 export type ToolEnvelope = SuccessEnvelope | ErrorEnvelope;
 
 export interface ToolExecutionContext {
-  config: RuntimeConfig;
+  config: EnvelopeConfig;
   requestId: string;
   toolName: string;
   startedAt: number;

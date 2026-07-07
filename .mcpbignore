@@ -1,0 +1,19 @@
+# Files excluded from the packed .mcpb bundle (gitignore-style patterns).
+# Keep: dist/, node_modules/, manifest.json, package.json, README.md, LICENSE
+src/
+test/
+scripts/
+coverage/
+.nyc_output/
+.git/
+.github/
+.idea/
+.vscode/
+tsconfig.json
+vitest.config.ts
+*.map
+*.tgz
+*.mcpb
+.env
+.env.*
+.DS_Store

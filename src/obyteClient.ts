@@ -1,9 +1,26 @@
 import { PACKAGE_NAME, PACKAGE_VERSION, WITNESSES_CACHE_TTL_MS } from "./constants.js";
 import { ObyteMcpError } from "./errors.js";
 import { ConcurrencyLimiter } from "./limiter.js";
-import type { RuntimeConfig } from "./types.js";
+import type { Network, RuntimeConfig } from "./types.js";
 
 type FetchLike = typeof fetch;
+
+/** The single-network view of the runtime config that one hub client needs. */
+export interface ClientConfig {
+  network: Network;
+  hubAddress: string;
+  timeoutMs: number;
+  maxConcurrency: number;
+}
+
+export function toClientConfig(config: RuntimeConfig, network: Network): ClientConfig {
+  return {
+    network,
+    hubAddress: config.networks[network].hubAddress,
+    timeoutMs: config.timeoutMs,
+    maxConcurrency: config.maxConcurrency
+  };
+}
 
 export interface HubRequestOptions {
   retry?: boolean;
@@ -27,7 +44,7 @@ export class ObyteHttpClient {
   retryCount = 0;
 
   constructor(
-    private readonly config: RuntimeConfig,
+    private readonly config: ClientConfig,
     private readonly fetchImpl: FetchLike = fetch
   ) {
     this.limiter = new ConcurrencyLimiter(config.maxConcurrency);
