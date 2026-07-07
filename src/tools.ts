@@ -3,11 +3,13 @@ import type { ZodType } from "zod/v4";
 import { assetExplorerUrl, summarizeBalanceAmounts } from "./amounts.js";
 import { envelopeConfig } from "./config.js";
 import { executeEnvelope } from "./envelope.js";
+import { fetchAssetHolders } from "./explorerClient.js";
 import { ObyteHttpClient } from "./obyteClient.js";
 import { assertNoSecrets } from "./secretGuard.js";
 import * as schemas from "./schemas.js";
 import { getAssetBySymbol, getDecimalsBySymbolOrAsset, getSymbolByAsset, resolveAsset } from "./symbols.js";
 import { textResult } from "./toolResult.js";
+import { checkForUpdate } from "./updateCheck.js";
 import type { Network, NetworkConfig, RuntimeConfig } from "./types.js";
 
 type ToolSchema = ZodType;
@@ -89,7 +91,7 @@ function registerTool(context: RegisterContext, tool: ToolDefinition): void {
   );
 }
 
-function recommendedTools(_context: RegisterContext): ToolDefinition[] {
+function recommendedTools(context: RegisterContext): ToolDefinition[] {
   return [
     {
       name: "obyte_analyze_address",
@@ -183,6 +185,21 @@ function recommendedTools(_context: RegisterContext): ToolDefinition[] {
       }
     },
     {
+      name: "obyte_get_asset_holders",
+      title: "Get Asset Holders",
+      schema: schemas.assetHoldersSchema,
+      amounts: true,
+      description:
+        'Recommended tool whenever the user asks who holds an Obyte asset, wants a top-holders list, or asks about distribution/concentration of a token. Accepts a token symbol (like GBYTE or OUSD) or a 44-character asset id and returns holders sorted by balance descending with raw and display amounts, plus total supply. Data comes from the Obyte explorer (a centralized convenience service), not the hub, and may lag slightly. Up to 100 holders per call.',
+      handler: async (args, { network }) =>
+        fetchAssetHolders({
+          network: network.network,
+          value: args.asset_or_symbol,
+          limit: args.limit ?? 20,
+          timeoutMs: context.config.timeoutMs
+        })
+    },
+    {
       name: "obyte_prepare_aa_dry_run",
       title: "Prepare AA Dry Run",
       schema: schemas.prepareAaDryRunSchema,
@@ -221,7 +238,7 @@ function rawTools(context: RegisterContext): ToolDefinition[] {
       title: "Get Obyte Network Info",
       schema: schemas.networkInfoSchema,
       description:
-        "Returns the effective MCP runtime configuration for both networks: default network, per-network hub URL and token registry, config precedence, limits, and witnesses cache metadata. Use before other calls when network selection matters.",
+        "Returns the effective MCP runtime configuration for both networks: default network, per-network hub URL and token registry, config precedence, limits, witnesses cache metadata, and whether a newer obyte-mcp version is published (mention it to the user when update_available is true). Use before other calls when network selection matters.",
       handler: async () => ({
         default_network: context.config.defaultNetwork,
         default_network_source: context.config.defaultNetworkSource,
@@ -235,7 +252,8 @@ function rawTools(context: RegisterContext): ToolDefinition[] {
         witnesses_cache: {
           mainnet: context.clients.mainnet.getWitnessesCacheInfo(),
           testnet: context.clients.testnet.getWitnessesCacheInfo()
-        }
+        },
+        update: await checkForUpdate()
       })
     },
     {

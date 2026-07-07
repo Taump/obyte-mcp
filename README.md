@@ -197,11 +197,17 @@ three ways:
 - **Base aliases work without a registry**: decimals for `base`/`GBYTE`/`MBYTE`/`KBYTE`/`BYTE`
   are answered locally, even on testnet with no registry configured.
 
-Asset pages on the Obyte explorer list the asset description and **current holders**:
+### Asset holders
+
+`obyte_get_asset_holders` returns the **top holders** of any asset (by symbol or asset id),
+sorted by balance descending, with raw and display amounts plus total supply — up to 100
+holders per call. The data comes from the Obyte explorer (a centralized convenience service,
+separate from the hub) and may lag the ledger slightly.
+
+For a human-browsable view, asset tools also return `explorer_asset_url`:
 `https://explorer.obyte.org/asset/<symbol|asset>` (testnet:
-`https://testnetexplorer.obyte.org/asset/<symbol|asset>`). Asset tools return this as
-`explorer_asset_url`. Note: explorer amounts are **already in display units** — only hub tool
-outputs need decimals conversion.
+`https://testnetexplorer.obyte.org/asset/<symbol|asset>`). Note: amounts on explorer web pages
+are **already in display units** — only hub tool outputs need decimals conversion.
 
 ## Making Agents Use It Automatically
 
@@ -247,6 +253,7 @@ Precedence, highest first:
 | `OBYTE_REQUEST_TIMEOUT_MS` | `--timeout-ms` | both | `20000` | Hub request timeout, `1000..120000` |
 | `OBYTE_MAX_CONCURRENCY` | `--max-concurrency` | both | `4` | Concurrent hub requests, `1..10` |
 | `OBYTE_MAX_OUTPUT_BYTES` | `--max-output-bytes` | both | `262144` | Max tool output bytes, `16384..1048576` |
+| `OBYTE_NO_UPDATE_CHECK` | — | — | unset | Set to disable the npm version check (`NO_UPDATE_NOTIFIER` also respected) |
 
 Default hubs:
 
@@ -261,6 +268,22 @@ Custom hub URL policy (applies to any hub override):
 - Non-HTTP protocols are rejected.
 
 ## Updating
+
+### How users learn about updates
+
+The server checks the npm registry once per process (3s timeout, fail-silent, disable with
+`OBYTE_NO_UPDATE_CHECK=1`) and surfaces the result in three places:
+
+- `obyte_get_network_info` returns an `update` block (`current`, `latest`, `update_available`)
+  — agents are instructed to mention available updates to the user.
+- `obyte-mcp doctor` prints an `update` check line (informational, never fails doctor).
+- On startup an `update_available` diagnostic is written to stderr (visible in client MCP logs).
+
+Users who keep the default unpinned `npx -y obyte-mcp` config get new versions automatically on
+the next client restart — the notification mostly matters for pinned versions, `.mcpb` bundles,
+and global installs. Watch the GitHub repo (Releases) for changelogs.
+
+### How to update
 
 The server runs through `npx`, which resolves the latest published version. How to move to a
 newer release depends on how it is registered:
@@ -299,6 +322,7 @@ Use these first for agent-facing tasks. All accept an optional `network`.
 - `obyte_analyze_unit`: joint plus optional AA response chain.
 - `obyte_analyze_aa`: AA balances with `balance_summary`, selected state vars, optional responses.
 - `obyte_resolve_asset`: resolves asset/symbol/decimals in one call, returns `explorer_asset_url` (holders page).
+- `obyte_get_asset_holders`: top holders of an asset (explorer-sourced), raw + display amounts, supply, up to 100 per call.
 - `obyte_prepare_aa_dry_run`: validates and dry-runs an AA trigger.
 - `obyte_get_portfolio_summary`: balances for up to 20 addresses with `totals_by_asset` display totals.
 

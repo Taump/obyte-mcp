@@ -1,6 +1,7 @@
 import { buildRuntimeConfig } from "./config.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "./constants.js";
 import { ObyteMcpError } from "./errors.js";
+import { checkForUpdate } from "./updateCheck.js";
 import type { CliOptions } from "./types.js";
 
 interface DoctorOptions {
@@ -28,6 +29,19 @@ export async function runDoctor(cliOptions: CliOptions, options: DoctorOptions):
       message: error instanceof ObyteMcpError ? error.message : String(error)
     });
   }
+
+  // Informational only: an available update never fails doctor.
+  const update = await checkForUpdate();
+  checks.push({
+    name: "update",
+    ok: true,
+    message:
+      update.update_available === true
+        ? `Update available: ${update.latest} (running ${update.current})`
+        : update.update_available === false
+          ? `Up to date (${update.current})`
+          : (update.note ?? "Update check skipped")
+  });
 
   const result = {
     package: PACKAGE_NAME,

@@ -70,6 +70,7 @@ Prefer recommended composite tools for agent-facing tasks:
 - obyte_analyze_unit
 - obyte_analyze_aa
 - obyte_resolve_asset
+- obyte_get_asset_holders
 - obyte_prepare_aa_dry_run
 - obyte_get_portfolio_summary
 
@@ -77,7 +78,7 @@ Use raw hub tools only when the user asks for exact hub API data or a composite 
 
 Amounts and decimals: raw ledger amounts are integers in the asset's smallest units. base is GBYTE with 9 decimals. Composite tools return display_total values already divided by 10^decimals - present those to users. For other amounts, resolve decimals first with obyte_resolve_asset or obyte_get_decimals_by_symbol_or_asset.
 
-Asset holders: asset tools return explorer_asset_url (https://explorer.obyte.org/asset/<symbol-or-asset>, testnet: https://testnetexplorer.obyte.org/asset/<symbol-or-asset>) listing the asset description and holders. Explorer amounts are already in display units - only hub tool outputs need decimals conversion.
+Asset holders: use obyte_get_asset_holders for top holders with raw and display amounts (explorer-sourced). Asset tools also return explorer_asset_url (https://explorer.obyte.org/asset/<symbol-or-asset>, testnet: https://testnetexplorer.obyte.org/asset/<symbol-or-asset>) for a browsable view. Explorer web page amounts are already in display units - only hub tool outputs need decimals conversion.
 `
   },
   {
@@ -103,7 +104,7 @@ This server serves both mainnet and testnet. Every tool accepts an optional \`ne
 - Inspect AA trigger failure: use \`obyte_analyze_unit\` and \`obyte_get_aa_response_chain\`.
 - Dry-run an AA trigger on testnet: call \`obyte_prepare_aa_dry_run\` with \`"network":"testnet"\`. Convert amounts to smallest units first.
 - Summarize AA state: use \`obyte_analyze_aa\` with a narrow \`state_var_prefix\`.
-- See who holds an asset: resolve it with \`obyte_resolve_asset\` and open its \`explorer_asset_url\`.
+- See who holds an asset: use \`obyte_get_asset_holders\` (top holders with display amounts); \`explorer_asset_url\` gives the browsable page.
 - Check which networks/hubs are active: use \`obyte_get_network_info\`.
 `
   },

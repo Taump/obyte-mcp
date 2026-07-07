@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "obyte-mcp",
   "display_name": "Obyte MCP",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Query Obyte mainnet and testnet hubs: balances, units, autonomous agents, AA state, AA dry runs, and token symbols.",
   "long_description": "Local stdio MCP server that serves both Obyte networks at once. Every tool accepts an optional \"network\" (\"mainnet\" or \"testnet\"); when omitted it uses the default network configured below. Read/query/dry-run only: it is not a wallet, signer, or broadcaster and never needs private keys.",
   "author": {

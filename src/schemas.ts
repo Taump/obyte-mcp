@@ -87,6 +87,13 @@ export const symbolByAssetSchema = z
 export const assetBySymbolSchema = z.object({ network: networkField, symbol, token_registry_address: optionalRegistry }).strict();
 export const decimalsSchema = z.object({ network: networkField, symbol_or_asset: stringValue, token_registry_address: optionalRegistry }).strict();
 export const resolveAssetSchema = z.object({ network: networkField, value: stringValue, token_registry_address: optionalRegistry }).strict();
+export const assetHoldersSchema = z
+  .object({
+    network: networkField,
+    asset_or_symbol: stringValue,
+    limit: z.number().int().min(1).max(100).optional().default(20)
+  })
+  .strict();
 
 export const analyzeAddressSchema = z
   .object({
