@@ -1,0 +1,77 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.taump/obyte-mcp",
+  "title": "Obyte MCP",
+  "description": "Local stdio MCP server for querying Obyte hubs, autonomous agents, balances, units, AA state, AA dry runs, and token symbols.",
+  "websiteUrl": "https://github.com/Taump/obyte-mcp",
+  "repository": {
+    "url": "https://github.com/Taump/obyte-mcp",
+    "source": "github"
+  },
+  "version": "0.1.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "obyte-mcp",
+      "version": "0.1.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "named",
+          "name": "--network",
+          "description": "Obyte network to query.",
+          "default": "mainnet",
+          "choices": ["mainnet", "testnet"]
+        },
+        {
+          "type": "named",
+          "name": "--hub",
+          "description": "Custom Obyte hub URL. Must be https, except http localhost is allowed for development.",
+          "isRequired": false
+        },
+        {
+          "type": "named",
+          "name": "--token-registry",
+          "description": "Token registry AA address. Mainnet has a default; testnet symbol lookups need an explicit registry when used.",
+          "isRequired": false
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "OBYTE_NETWORK",
+          "description": "Obyte network to query.",
+          "default": "mainnet",
+          "choices": ["mainnet", "testnet"],
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OBYTE_HUB_ADDRESS",
+          "description": "Custom Obyte hub URL. Must be https, except http localhost is allowed for development.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "OBYTE_TOKEN_REGISTRY_ADDRESS",
+          "description": "Token registry AA address for symbol and decimals lookups.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "tools": ["npm", "mcp-publisher"],
+      "transport": "stdio",
+      "networkDefaults": {
+        "mainnetHub": "https://obyte.org/api",
+        "testnetHub": "https://testnet.obyte.org/api"
+      }
+    }
+  }
+}

@@ -486,6 +486,70 @@ npm run build
 npx -y @modelcontextprotocol/inspector node dist/index.js --network mainnet
 ```
 
+## Directory Listings
+
+### MCP.Directory
+
+Submit the server at:
+
+```text
+https://mcp.directory/submit
+```
+
+Use:
+
+- GitHub Repository URL: `https://github.com/Taump/obyte-mcp`
+- npm Package: `obyte-mcp`
+- Short Description:
+
+```text
+Local stdio MCP server for querying Obyte hubs, autonomous agents, balances, AA state, AA dry runs, and token symbols.
+```
+
+MCP.Directory says it auto-pulls metadata from GitHub, detects tools from the MCP implementation, generates install configurations for major clients, reviews the submission, and publishes it to the directory. Make sure the GitHub repository is pushed and the README is current before submitting.
+
+### Official MCP Registry
+
+The official registry hosts metadata, not package artifacts. The npm package must already be published, and npm ownership is verified through the `mcpName` field in `package.json`.
+
+This package uses:
+
+```json
+{
+  "mcpName": "io.github.taump/obyte-mcp"
+}
+```
+
+The matching registry metadata is in `server.json`.
+
+Because `0.1.0` was published before `mcpName` was added, publish a new npm version first:
+
+```bash
+npm run typecheck
+npm test
+npm run build
+npm publish
+```
+
+Then install and use `mcp-publisher`:
+
+```bash
+# macOS/Linux via release tarball
+curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+sudo mv mcp-publisher /usr/local/bin/
+
+mcp-publisher login github
+mcp-publisher publish
+```
+
+Verify publication:
+
+```bash
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.taump/obyte-mcp"
+```
+
+With GitHub authentication, the registry namespace must match the GitHub owner. This project uses `io.github.taump/obyte-mcp`, so publish while authenticated as the GitHub account that owns `Taump/obyte-mcp`, or publish from a GitHub Action in that repository.
+
 ## Local Development
 
 ```bash
@@ -544,8 +608,10 @@ Also:
 - Test Codex config.
 - Test Claude Desktop config.
 - Test Claude Code command with the required `--`.
+- Publish npm version containing `mcpName`.
+- Publish `server.json` to the Official MCP Registry with `mcp-publisher`.
+- Submit `https://github.com/Taump/obyte-mcp` and npm package `obyte-mcp` to MCP.Directory.
 - Update version-tested notes in this README.
 - Verify README examples match actual CLI output.
 - Publish with npm provenance if available.
 - Create a GitHub release with changelog and compatibility notes.
-

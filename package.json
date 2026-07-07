@@ -1,6 +1,7 @@
 {
   "name": "obyte-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "mcpName": "io.github.taump/obyte-mcp",
   "description": "Local stdio MCP server for querying Obyte hubs.",
   "type": "module",
   "bin": {
@@ -9,7 +10,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "server.json"
   ],
   "engines": {
     "node": ">=20"

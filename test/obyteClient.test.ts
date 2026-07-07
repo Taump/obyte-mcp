@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildRuntimeConfig } from "../src/config.js";
+import { PACKAGE_VERSION } from "../src/constants.js";
 import { ObyteHttpClient } from "../src/obyteClient.js";
 
 describe("ObyteHttpClient", () => {
@@ -12,7 +13,7 @@ describe("ObyteHttpClient", () => {
       expect.objectContaining({
         method: "POST",
         body: "{}",
-        headers: expect.objectContaining({ "User-Agent": "obyte-mcp/0.1.0" })
+        headers: expect.objectContaining({ "User-Agent": `obyte-mcp/${PACKAGE_VERSION}` })
       })
     );
   });
