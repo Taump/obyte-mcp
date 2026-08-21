@@ -3,9 +3,9 @@ import { parseNetwork } from "./config.js";
 import type { CliOptions, Network } from "./types.js";
 
 export type CommandName = "server" | "setup" | "install" | "doctor" | "help" | "version";
-export type ClientName = "codex" | "claude-desktop" | "claude-code" | "vscode";
+export type ClientName = "codex" | "claude-desktop" | "claude-code" | "cursor" | "vscode";
 
-export const CLIENT_NAMES: readonly ClientName[] = ["vscode", "codex", "claude-desktop", "claude-code"];
+export const CLIENT_NAMES: readonly ClientName[] = ["vscode", "cursor", "codex", "claude-desktop", "claude-code"];
 
 export interface ParsedCli {
   command: CommandName;
@@ -150,6 +150,6 @@ function parseInteger(value: string, label: string): number {
 }
 
 function parseClient(value: string): ClientName {
-  if (value === "codex" || value === "claude-desktop" || value === "claude-code" || value === "vscode") return value;
-  throw new ObyteMcpError("CONFIG_ERROR", "--client must be vscode, codex, claude-desktop, or claude-code", { value });
+  if (CLIENT_NAMES.includes(value as ClientName)) return value as ClientName;
+  throw new ObyteMcpError("CONFIG_ERROR", `--client must be one of ${CLIENT_NAMES.join(", ")}`, { value });
 }

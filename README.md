@@ -2,54 +2,38 @@
 
 Local stdio MCP server for querying Obyte from AI tools. **One server serves both mainnet and testnet** — every tool takes an optional `network`, so you never run two servers.
 
-`obyte-mcp` exposes Obyte hub reads, autonomous-agent inspection, AA dry runs, and token symbol helpers to MCP clients such as VS Code, Codex, Claude Desktop, and Claude Code.
+`obyte-mcp` exposes Obyte hub reads, autonomous-agent inspection, AA dry runs, and token symbol helpers to MCP clients such as Cursor, VS Code, Codex, Claude Desktop, and Claude Code.
 
-Official Obyte docs:
-
-- https://developer.obyte.org/
-- https://developer.obyte.org/autonomous-agents
-
-## What This Is
-
-- A local MCP server that talks over stdio only.
-- A read/query/dry-run connector for Obyte **mainnet and testnet at the same time**.
-- A toolset for balances, units, witnesses, AA state vars, AA getters, AA dry runs, token symbols, and agent-friendly summaries.
-
-## What This Is Not
-
-- Not a wallet.
-- Not a signer.
-- Not a transaction broadcaster.
-- Not a service that opens a local TCP port.
-- Not a place to paste private keys, seed phrases, mnemonics, xprv values, passphrases, or other secrets.
-
-The server uses stdio only. It does not start an HTTP server and does not listen on a local TCP port.
-
-## Requirements
-
-- Node.js `>=20`
-- npm / npx
-- An MCP client that supports local stdio servers
+[![Add obyte-mcp to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=obyte&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIm9ieXRlLW1jcCJdfQ==)
+[![Install obyte-mcp in VS Code](https://img.shields.io/badge/VS_Code-Install_obyte--mcp-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=obyte&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22obyte-mcp%22%5D%7D)
 
 ## Quick Start
 
-Run it (serves both networks):
+Use a button above, or run the one command for your client:
 
 ```bash
-npx -y obyte-mcp
+claude mcp add --transport stdio obyte -- npx -y obyte-mcp                    # Claude Code
+codex mcp add obyte -- npx -y obyte-mcp                                       # Codex CLI
+code --add-mcp '{"name":"obyte","command":"npx","args":["-y","obyte-mcp"]}'   # VS Code
+npx -y obyte-mcp install                                                      # every client on this machine
 ```
 
-Make testnet the default network for calls that omit `network` (both stay available):
+Needs Node.js `>=20`. Nothing else to configure: no account, no API key, no per-network setup -
+mainnet and testnet are both served from the start. Restart your client afterwards and ask it
+something like *"what is the GBYTE balance of this Obyte address?"*.
 
-```bash
-npx -y obyte-mcp --network testnet
-```
+To make testnet the default for calls that omit `network` (both stay available), add
+`--network testnet` to any of the commands above.
 
 ## Install (one command)
 
-The fastest way to register the server with your clients. It runs each client's own CLI
-(`code --add-mcp`, `codex mcp add`, `claude mcp add`) and writes the Claude Desktop config
-file directly. When a client CLI is missing, it prints the exact manual steps instead.
+Registers the server with every MCP client it finds on this machine. It runs each client's own
+CLI (`code --add-mcp`, `codex mcp add`, `claude mcp add`) and writes the Cursor and Claude Desktop
+config files directly.
+
+Clients that are not installed are skipped quietly - only what actually changed is reported, along
+with which clients to restart. Naming one explicitly with `--client` always does something: if that
+client is not detected, the exact manual steps are printed instead.
 
 Preview first (changes nothing):
 
@@ -71,8 +55,8 @@ npx -y obyte-mcp install --client claude-desktop --network testnet
 npx -y obyte-mcp install --client codex --name obyte-testnet --network testnet
 ```
 
-Flags: `--client vscode|codex|claude-desktop|claude-code` (default: all), `--name NAME`
-(server name, default `obyte`), `--dry-run`, plus any config flag from the table below.
+Flags: `--client vscode|cursor|codex|claude-desktop|claude-code` (default: every detected client),
+`--name NAME` (server name, default `obyte`), `--dry-run`, plus any config flag from the table below.
 
 From a checkout you can use the wrapper scripts (they build first if needed):
 
@@ -102,6 +86,24 @@ changing anything (add `--print-only --client <name>` for one).
 ```
 
 VS Code uses `servers` (not `mcpServers`) and requires `"type": "stdio"`.
+
+### Cursor
+
+Cursor has no MCP CLI, so `obyte-mcp install --client cursor` writes its config file directly
+(backing the old one up to `*.bak` and keeping your other servers). The
+[button at the top](https://cursor.com/install-mcp?name=obyte&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIm9ieXRlLW1jcCJdfQ==) does the same in one click. To do it by hand, edit
+`~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project) and restart Cursor:
+
+```json
+{
+  "mcpServers": {
+    "obyte": {
+      "command": "npx",
+      "args": ["-y", "obyte-mcp"]
+    }
+  }
+}
+```
 
 ### Codex CLI
 
@@ -163,6 +165,33 @@ npm run bundle      # builds, then runs `mcpb pack` -> obyte-mcp.mcpb
 
 Then open `obyte-mcp.mcpb` in Claude Desktop and click Install. The bundle exposes a
 "Default network" option and an optional testnet token registry in the install UI.
+
+## What This Is
+
+- A local MCP server that talks over stdio only.
+- A read/query/dry-run connector for Obyte **mainnet and testnet at the same time**.
+- A toolset for balances, units, witnesses, AA state vars, AA getters, AA dry runs, token symbols, and agent-friendly summaries.
+
+## What This Is Not
+
+- Not a wallet.
+- Not a signer.
+- Not a transaction broadcaster.
+- Not a service that opens a local TCP port.
+- Not a place to paste private keys, seed phrases, mnemonics, xprv values, passphrases, or other secrets.
+
+The server uses stdio only. It does not start an HTTP server and does not listen on a local TCP port.
+
+## Requirements
+
+- Node.js `>=20`
+- npm / npx
+- An MCP client that supports local stdio servers
+
+Official Obyte docs:
+
+- https://developer.obyte.org/
+- https://developer.obyte.org/autonomous-agents
 
 ## Choosing A Network
 
@@ -357,7 +386,11 @@ Advanced tools that mirror Obyte hub/client methods (each accepts an optional `n
 - `obyte_get_asset_by_symbol`
 - `obyte_get_decimals_by_symbol_or_asset`
 
-Base asset decimals:
+Registry symbols are uppercase, so symbol inputs are uppercased before lookup: `ousd` and `OUSD`
+resolve to the same asset. Asset ids are base64 and stay case-sensitive. A symbol that is not in the
+selected registry comes back as `asset: null, symbol: null` with a note - never as a made-up match.
+
+Base asset decimals (aliases are case-insensitive):
 
 - `base` and `GBYTE`: `9`
 - `MBYTE`: `6`
@@ -448,7 +481,7 @@ The server measures serialized UTF-8 output bytes. If output exceeds `OBYTE_MAX_
 Strategy:
 
 - Arrays keep the first items that fit and append `{ "__truncated__": true, "omitted_items": N }`.
-- Objects keep keys until the limit and add `__truncated_keys__`.
+- Objects keep keys until the limit and add `__truncated_keys__: { "omitted_keys": N, "first_omitted_keys": [...] }` (the omitted list is summarized, never spelled out in full).
 - Strings are cut at a UTF-8 safe boundary and end with `...[truncated]`.
 - Map-like outputs such as AA state vars and balance maps are sorted by key before returning.
 - If safe truncation cannot fit the envelope, the server returns `OUTPUT_TOO_LARGE`.
@@ -502,17 +535,23 @@ Dry-run tools are not marked idempotent.
 
 ### Secret Guard
 
-The server rejects inputs with secret-like field names or obvious private-key/mnemonic patterns:
+The server rejects the key material it never needs. Rejected field names:
 
-- `private_key`
-- `privkey`
-- `seed`
+- `private_key` / `privkey`
+- `secret_key`
+- `seed` / `seed_phrase`
 - `mnemonic`
-- `xprv`
+- `xprv` / `tprv`
 - `passphrase`
-- `secret`
+- `wif`
 
-String scanning is conservative. False positives are possible. If a public value is rejected, remove secret-like material or rename the field before calling the tool. This server never needs secrets.
+Rejected values, regardless of field name: `xprv`/`tprv` extended keys and mnemonic-like phrases.
+
+The guard is deliberately name-driven for hex. AA triggers and getter arguments legitimately carry
+opaque blobs - Ethereum txids (`0x` + 64 hex), sha256 hashes, and hash-timelock fields such as
+`secret_hash` - so a 64-character hex string is only rejected under a field name that claims to hold
+a key (`key`, `sk`, `priv`, `wif`), and never under a name about hashing. If a public value is still
+rejected, rename the field before calling the tool. This server never needs secrets.
 
 ### Prompt Injection
 
@@ -595,7 +634,7 @@ official building blocks from https://github.com/modelcontextprotocol are:
   Windows (see the bundle section above).
 
 The `obyte-mcp install` command covers the remaining gap by driving each client's own CLI so one
-command reaches VS Code, Codex, Claude Desktop, and Claude Code.
+command reaches VS Code, Cursor, Codex, Claude Desktop, and Claude Code.
 
 ### Official MCP Registry
 
@@ -656,15 +695,17 @@ Project structure:
 - `src/install.ts`: client CLI installer / Claude Desktop config writer
 - `src/configSnippets.ts`: per-client config and command builders
 - `src/resources.ts`, `src/prompts.ts`, `src/symbols.ts`, `src/schemas.ts`
+- `scripts/sync-version.mjs`: propagates the package.json version to `manifest.json` / `server.json`
 
 ## Compatibility Matrix
 
 | Component | Status |
 | --- | --- |
 | Node.js | `>=20` |
-| MCP SDK | `@modelcontextprotocol/server@^2.0.0-beta.2` |
+| MCP SDK | `@modelcontextprotocol/server@^2.0.0` |
 | Transport | Local stdio only |
-| VS Code | `code --add-mcp` / `.vscode/mcp.json` |
+| VS Code | one-click badge / `code --add-mcp` / `.vscode/mcp.json` |
+| Cursor | one-click badge / `~/.cursor/mcp.json` |
 | Codex CLI | `codex mcp add` / `~/.codex/config.toml` |
 | Claude Desktop | config file / `.mcpb` bundle |
 | Claude Code | `claude mcp add` / `.mcpb` bundle |
@@ -674,6 +715,26 @@ Project structure:
 | Custom hub | HTTPS only, plus localhost HTTP for development |
 
 ## Release Checklist
+
+`package.json` is the only place the version lives. `src/constants.ts` reads it at runtime, and
+`scripts/sync-version.mjs` propagates it to `manifest.json` and `server.json` (which cannot read it
+themselves). `npm test` fails if they ever drift, and `npm publish` re-syncs before packing.
+
+```bash
+npm version 0.3.0    # bump package.json, sync manifest.json + server.json, commit, tag
+npm publish          # prepublishOnly: sync + typecheck + test + build
+```
+
+Editing `package.json` by hand works too - run `npm run sync-version` (or just publish, which does
+it for you). `npm run sync-version -- --check` reports drift without writing.
+
+Publishing to npm only reaches users whose config is the unpinned `npx -y obyte-mcp` (all snippets
+above). The other channels have to be refreshed explicitly:
+
+```bash
+mcp-publisher publish    # MCP registry entry is version-pinned
+npm run bundle           # rebuild obyte-mcp.mcpb, then attach it to the GitHub release
+```
 
 Before publishing:
 
@@ -689,7 +750,8 @@ Also:
 
 - Test the packed tarball with MCP Inspector.
 - Test `obyte-mcp install --dry-run` for each client.
-- Verify VS Code, Codex, Claude Desktop, and Claude Code configs.
+- Verify VS Code, Cursor, Codex, Claude Desktop, and Claude Code configs.
+- Check that the Cursor and VS Code install badges still resolve.
 - Build and install the `.mcpb` bundle in Claude Desktop.
 - Publish an npm version containing `mcpName`.
 - Publish `server.json` to the Official MCP Registry with `mcp-publisher`.

@@ -169,12 +169,14 @@ function recommendedTools(context: RegisterContext): ToolDefinition[] {
       title: "Resolve Obyte Asset",
       schema: schemas.resolveAssetSchema,
       description:
-        "Recommended tool for resolving an Obyte asset id (44-character base64 string) or token symbol (like GBYTE or OUSD) in the selected network's registry. Returns asset, symbol, and decimals when available. Always call this (or obyte_get_decimals_by_symbol_or_asset) before presenting amounts of unknown assets to users. Registry mappings are convenience metadata, not proof of legitimacy.",
+        "Recommended tool for resolving an Obyte asset id (44-character base64 string) or token symbol (like GBYTE or OUSD) in the selected network's registry. Symbols are uppercased before lookup, so \"ousd\" and \"OUSD\" both work; asset ids stay case-sensitive. Returns asset, symbol, and decimals when available, or asset/symbol null with a note when the symbol is not registered. Always call this (or obyte_get_decimals_by_symbol_or_asset) before presenting amounts of unknown assets to users. Registry mappings are convenience metadata, not proof of legitimacy.",
       handler: async (args, { client, network }) => {
         const result = (await resolveAsset(client, args.value, {
           configuredRegistryAddress: network.tokenRegistryAddress,
           tokenRegistryAddress: args.token_registry_address
         })) as Record<string, unknown>;
+        // An unresolved symbol has no explorer page; linking one would 404.
+        if (result.asset === null && result.symbol === null) return result;
         const urlTarget = typeof result.symbol === "string" ? result.symbol : args.value;
         return {
           ...result,
@@ -428,7 +430,7 @@ function symbolTools(_context: RegisterContext): ToolDefinition[] {
       title: "Get Asset By Symbol",
       schema: schemas.assetBySymbolSchema,
       description:
-        "Resolves a token symbol to an Obyte asset id through the selected registry. GBYTE, MBYTE, KBYTE, and BYTE resolve to base.",
+        "Resolves a token symbol to an Obyte asset id through the selected registry. Symbols are uppercased before lookup. GBYTE, MBYTE, KBYTE, and BYTE resolve to base.",
       handler: async (args, { client, network }) =>
         getAssetBySymbol(client, args.symbol, {
           configuredRegistryAddress: network.tokenRegistryAddress,
@@ -440,7 +442,7 @@ function symbolTools(_context: RegisterContext): ToolDefinition[] {
       title: "Get Decimals By Symbol Or Asset",
       schema: schemas.decimalsSchema,
       description:
-        "Returns decimals for base aliases or a registry-known token symbol/asset. base and GBYTE use 9, MBYTE 6, KBYTE 3, BYTE 0. Registry data is untrusted metadata.",
+        "Returns decimals for base aliases or a registry-known token symbol/asset. Symbols are uppercased before lookup. base and GBYTE use 9, MBYTE 6, KBYTE 3, BYTE 0. Registry data is untrusted metadata.",
       handler: async (args, { client, network }) =>
         getDecimalsBySymbolOrAsset(client, args.symbol_or_asset, {
           configuredRegistryAddress: network.tokenRegistryAddress,

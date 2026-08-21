@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
-# Register obyte-mcp with your local MCP clients (VS Code, Codex, Claude Desktop, Claude Code).
+# Register obyte-mcp with your local MCP clients (VS Code, Cursor, Codex, Claude Desktop, Claude Code).
 #
 # Usage:
-#   ./scripts/install.sh                       # all clients, mainnet default
+#   ./scripts/install.sh                       # every detected client, mainnet default
 #   ./scripts/install.sh --dry-run             # preview without changing anything
 #   ./scripts/install.sh --client vscode       # a single client
 #   ./scripts/install.sh --network testnet     # make testnet the default network

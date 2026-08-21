@@ -61,4 +61,46 @@ describe("symbols", () => {
       decimals: 4
     });
   });
+  it("uppercases symbols before hitting the registry", async () => {
+    // Regression: registry symbols are always uppercase, so "ousd" used to
+    // resolve to nothing at all instead of the registered token.
+    await expect(getAssetBySymbol(client, "tok", { configuredRegistryAddress: "REG" })).resolves.toBe(
+      "ASSET123456789012345678901234567890123456789"
+    );
+    await expect(getDecimalsBySymbolOrAsset(client, "tok", { configuredRegistryAddress: "REG" })).resolves.toBe(4);
+    await expect(resolveAsset(client, "tok", { configuredRegistryAddress: "REG" })).resolves.toMatchObject({
+      input: "tok",
+      asset: "ASSET123456789012345678901234567890123456789",
+      symbol: "TOK",
+      decimals: 4
+    });
+  });
+
+  it("accepts base aliases in any case", async () => {
+    await expect(getDecimalsBySymbolOrAsset(client, "gbyte")).resolves.toBe(9);
+    await expect(getAssetBySymbol(client, "gbyte")).resolves.toBe("base");
+    await expect(resolveAsset(client, "byte")).resolves.toMatchObject({ asset: "base", symbol: "BYTE", decimals: 0 });
+  });
+
+  it("looks a symbol up with a single registry read", async () => {
+    const prefixes: string[] = [];
+    const counting = {
+      async getAaStateVars(address: string, prefix?: string) {
+        prefixes.push(prefix ?? "");
+        return client.getAaStateVars(address, prefix);
+      }
+    };
+    await getAssetBySymbol(counting, "tok", { configuredRegistryAddress: "REG" });
+    expect(prefixes).toEqual(["s2a_TOK"]);
+  });
+
+  it("reports unknown symbols instead of echoing them back", async () => {
+    await expect(resolveAsset(client, "nope", { configuredRegistryAddress: "REG" })).resolves.toMatchObject({
+      input: "nope",
+      asset: null,
+      symbol: null,
+      decimals: null
+    });
+    await expect(getDecimalsBySymbolOrAsset(client, "nope", { configuredRegistryAddress: "REG" })).rejects.toThrow(/no such symbol/);
+  });
 });

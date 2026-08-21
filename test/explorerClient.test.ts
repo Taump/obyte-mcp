@@ -101,4 +101,29 @@ describe("fetchAssetHolders", () => {
       /HTTP 502/
     );
   });
+  it("matches the requested asset case-insensitively when the explorer normalizes the key", async () => {
+    const payload = tokenPayload();
+    // Two asset entries, so a blind "first asset entry" pick would be wrong.
+    (payload[2] as Record<string, unknown>) = { "asset:OTHER": 18, "asset:TOK": 3 };
+    (payload as unknown[])[18] = { name: 19, decimals: 6, holders: 7, supply: 14, endHolders: 15 };
+    (payload as unknown[])[19] = "OTHER";
+    const result = await fetchAssetHolders({
+      network: "mainnet",
+      value: "tok",
+      limit: 20,
+      timeoutMs: 5000,
+      fetchImpl: fetchReturning(payload)
+    });
+    expect(result.name).toBe("TOK");
+  });
+
+  it("refuses to answer with another asset when the requested one is absent", async () => {
+    // Regression: the payload used to fall through to whatever asset came first,
+    // silently returning a different token's holders.
+    const payload = tokenPayload();
+    (payload[2] as Record<string, unknown>) = { "asset:OTHER": 3, "asset:SECOND": 3 };
+    await expect(
+      fetchAssetHolders({ network: "mainnet", value: "TOK", limit: 20, timeoutMs: 5000, fetchImpl: fetchReturning(payload) })
+    ).rejects.toThrow(/did not contain the requested asset/);
+  });
 });

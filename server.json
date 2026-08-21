@@ -8,13 +8,13 @@
     "url": "https://github.com/Taump/obyte-mcp",
     "source": "github"
   },
-  "version": "0.2.1",
+  "version": "0.3.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "obyte-mcp",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -25,7 +25,10 @@
           "name": "--network",
           "description": "Default Obyte network used when a tool call omits the network argument. Both networks stay available regardless.",
           "default": "mainnet",
-          "choices": ["mainnet", "testnet"]
+          "choices": [
+            "mainnet",
+            "testnet"
+          ]
         },
         {
           "type": "named",
@@ -51,7 +54,10 @@
           "name": "OBYTE_NETWORK",
           "description": "Default Obyte network used when a tool call omits the network argument. Both networks stay available.",
           "default": "mainnet",
-          "choices": ["mainnet", "testnet"],
+          "choices": [
+            "mainnet",
+            "testnet"
+          ],
           "isRequired": false,
           "isSecret": false
         },
@@ -78,7 +84,10 @@
   ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
-      "tools": ["npm", "mcp-publisher"],
+      "tools": [
+        "npm",
+        "mcp-publisher"
+      ],
       "transport": "stdio",
       "networkDefaults": {
         "mainnetHub": "https://obyte.org/api",

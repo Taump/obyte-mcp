@@ -1,5 +1,16 @@
-export const PACKAGE_NAME = "obyte-mcp";
-export const PACKAGE_VERSION = "0.2.1";
+import { createRequire } from "node:module";
+
+/**
+ * package.json is the single source of truth for name and version. It sits one
+ * level above dist/ in the published tarball and inside the .mcpb bundle, so
+ * this resolves in every distribution channel. Keeping a second copy here is
+ * what makes a release report the wrong version to clients and to the update
+ * check; scripts/sync-version.mjs propagates it to manifest.json/server.json.
+ */
+const packageJson = createRequire(import.meta.url)("../package.json") as { name: string; version: string };
+
+export const PACKAGE_NAME = packageJson.name;
+export const PACKAGE_VERSION = packageJson.version;
 
 export const MAINNET_HUB = "https://obyte.org/api";
 export const TESTNET_HUB = "https://testnet.obyte.org/api";

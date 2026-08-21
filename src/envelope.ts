@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ObyteMcpError, toObyteMcpError } from "./errors.js";
 import { sortKnownMapOutputs } from "./jsonUtils.js";
-import type { EnvelopeConfig, ToolEnvelope, ToolExecutionContext } from "./types.js";
+import type { EnvelopeConfig, SuccessEnvelope, ToolEnvelope, ToolExecutionContext } from "./types.js";
 
 export function createToolContext(config: EnvelopeConfig, toolName: string): ToolExecutionContext {
   return {
@@ -50,6 +50,11 @@ export function errorEnvelope(context: ToolExecutionContext, error: unknown): To
   };
 }
 
+/** Attempts to fit `data` into the limit, halving the budget each round. */
+const MAX_TRUNCATION_ATTEMPTS = 8;
+/** Slack for the `output_bytes_after_truncation` field added after measuring. */
+const META_SLACK_BYTES = 128;
+
 export function envelopeToText(envelope: ToolEnvelope, maxOutputBytes: number): string {
   const serialized = JSON.stringify(envelope, null, 2);
   const initialBytes = Buffer.byteLength(serialized, "utf8");
@@ -59,28 +64,38 @@ export function envelopeToText(envelope: ToolEnvelope, maxOutputBytes: number): 
     return JSON.stringify(outputTooLargeEnvelope(envelope, initialBytes, maxOutputBytes), null, 2);
   }
 
-  const truncated = structuredClone(envelope) as ToolEnvelope;
-  if (!truncated.ok) return JSON.stringify(outputTooLargeEnvelope(envelope, initialBytes, maxOutputBytes), null, 2);
+  const truncated: SuccessEnvelope = {
+    ok: true,
+    meta: {
+      ...envelope.meta,
+      truncated: true,
+      output_bytes_before_truncation: initialBytes,
+      output_bytes_after_truncation: initialBytes,
+      truncation_reason: "response exceeded OBYTE_MAX_OUTPUT_BYTES"
+    },
+    data: null
+  };
 
-  truncated.meta.truncated = true;
-  truncated.meta.output_bytes_before_truncation = initialBytes;
-  truncated.meta.truncation_reason = "response exceeded OBYTE_MAX_OUTPUT_BYTES";
-  truncated.data = truncateValue(truncated.data, Math.max(1024, Math.floor(maxOutputBytes * 0.7)));
-
-  let text = JSON.stringify(truncated, null, 2);
-  let bytes = Buffer.byteLength(text, "utf8");
-  while (bytes > maxOutputBytes && truncated.ok) {
-    truncated.data = truncateValue(truncated.data, Math.max(256, Math.floor(maxOutputBytes * 0.45)));
+  // Budgets are measured on compact JSON while the envelope is emitted with
+  // 2-space indentation, so each round retries from the original data with a
+  // halved budget instead of re-truncating an already truncated value.
+  let budget = Math.max(1024, Math.floor(maxOutputBytes * 0.7));
+  let text = "";
+  let bytes = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < MAX_TRUNCATION_ATTEMPTS; attempt += 1) {
+    truncated.data = fitValue(envelope.data, budget).value;
     text = JSON.stringify(truncated, null, 2);
     bytes = Buffer.byteLength(text, "utf8");
-    if (isTerminalTruncation(truncated.data)) break;
+    if (bytes <= maxOutputBytes - META_SLACK_BYTES) break;
+    budget = Math.floor(budget / 2);
+    if (budget < 256) break;
   }
 
-  if (bytes > maxOutputBytes) {
+  if (bytes > maxOutputBytes - META_SLACK_BYTES) {
     return JSON.stringify(outputTooLargeEnvelope(envelope, initialBytes, maxOutputBytes), null, 2);
   }
 
-  if (truncated.ok) truncated.meta.output_bytes_after_truncation = bytes;
+  truncated.meta.output_bytes_after_truncation = bytes;
   return JSON.stringify(truncated, null, 2);
 }
 
@@ -101,60 +116,112 @@ function outputTooLargeEnvelope(original: ToolEnvelope, initialBytes: number, ma
   };
 }
 
-function truncateValue(value: unknown, budgetBytes: number): unknown {
-  if (value === null || typeof value === "number" || typeof value === "boolean") return value;
-  if (typeof value === "string") return truncateString(value, budgetBytes);
-  if (Array.isArray(value)) return truncateArray(value, budgetBytes);
-  if (typeof value === "object") return truncateObject(value as Record<string, unknown>, budgetBytes);
-  return String(value);
+/**
+ * A value that fits a byte budget, carried together with its serialized size so
+ * callers never have to re-serialize it. Sizing every candidate from scratch is
+ * what made truncation quadratic: a 300KB state-var map cost seconds of CPU.
+ */
+interface FittedValue {
+  value: unknown;
+  bytes: number;
 }
 
-function truncateArray(value: unknown[], budgetBytes: number): unknown[] {
-  const result: unknown[] = [];
-  for (let index = 0; index < value.length; index += 1) {
-    let childBudget = Math.floor(budgetBytes / Math.max(1, value.length));
-    let child = truncateValue(value[index], childBudget);
-    let candidate = [...result, child];
-    while (Buffer.byteLength(JSON.stringify(candidate), "utf8") > budgetBytes && childBudget > 128) {
-      childBudget = Math.floor(childBudget * 0.7);
-      child = truncateValue(value[index], childBudget);
-      candidate = [...result, child];
+/** Smallest budget worth handing to a child before giving up on it. */
+const MIN_CHILD_BUDGET = 128;
+/** Room kept for the `__truncated__` / `__truncated_keys__` marker. */
+const MARKER_RESERVE_BYTES = 128;
+/** Omitted keys are summarized, never listed in full: the list itself can be huge. */
+const MAX_LISTED_OMITTED_KEYS = 10;
+
+function jsonBytes(value: unknown): number {
+  const text = JSON.stringify(value);
+  return text === undefined ? 0 : Buffer.byteLength(text, "utf8");
+}
+
+function fitValue(value: unknown, budgetBytes: number): FittedValue {
+  const bytes = jsonBytes(value);
+  if (bytes <= budgetBytes) return { value, bytes };
+  if (typeof value === "string") {
+    // truncateString budgets raw UTF-8 bytes; serialization adds quotes and may
+    // escape characters, so shrink until the serialized form really fits.
+    let allowance = Math.max(0, budgetBytes - 2);
+    let shortened = truncateString(value, allowance);
+    let shortenedBytes = jsonBytes(shortened);
+    while (shortenedBytes > budgetBytes && allowance > 16) {
+      allowance = Math.floor(allowance / 2);
+      shortened = truncateString(value, allowance);
+      shortenedBytes = jsonBytes(shortened);
     }
-    if (Buffer.byteLength(JSON.stringify(candidate), "utf8") > budgetBytes) {
-      result.push({ __truncated__: true, omitted_items: value.length - index });
-      return result;
-    }
-    result.push(candidate[candidate.length - 1]);
+    return { value: shortened, bytes: shortenedBytes };
   }
-  return result;
+  if (Array.isArray(value)) return fitArray(value, budgetBytes);
+  if (value !== null && typeof value === "object") return fitObject(value as Record<string, unknown>, budgetBytes);
+  // Numbers, booleans and null are already minimal.
+  return { value, bytes };
 }
 
-function truncateObject(value: Record<string, unknown>, budgetBytes: number): Record<string, unknown> {
+function fitArray(value: unknown[], budgetBytes: number): FittedValue {
+  const result: unknown[] = [];
+  let used = 2; // []
+
+  for (let index = 0; index < value.length; index += 1) {
+    const separator = result.length > 0 ? 1 : 0;
+    const available = budgetBytes - used - separator - MARKER_RESERVE_BYTES;
+    const share = Math.floor((budgetBytes - used) / (value.length - index));
+    const childBudget = Math.min(available, Math.max(MIN_CHILD_BUDGET, share));
+    if (childBudget < MIN_CHILD_BUDGET) return withOmittedItems(result, used, value.length - index);
+
+    const child = fitValue(value[index], childBudget);
+    if (used + separator + child.bytes > budgetBytes - MARKER_RESERVE_BYTES) {
+      return withOmittedItems(result, used, value.length - index);
+    }
+    result.push(child.value);
+    used += separator + child.bytes;
+  }
+  return { value: result, bytes: used };
+}
+
+function withOmittedItems(result: unknown[], used: number, omitted: number): FittedValue {
+  const marker = { __truncated__: true, omitted_items: omitted };
+  const separator = result.length > 0 ? 1 : 0;
+  result.push(marker);
+  return { value: result, bytes: used + separator + jsonBytes(marker) };
+}
+
+function fitObject(value: Record<string, unknown>, budgetBytes: number): FittedValue {
+  const entries = Object.entries(value).filter(([, child]) => JSON.stringify(child) !== undefined);
   const result: Record<string, unknown> = {};
-  const entries = Object.entries(value);
+  let used = 2; // {}
+  let kept = 0;
+
   for (let index = 0; index < entries.length; index += 1) {
     const [key, child] = entries[index]!;
-    let childBudget = Math.floor(budgetBytes / Math.max(1, entries.length));
-    let truncatedChild = truncateValue(child, childBudget);
-    let candidate = {
-      ...result,
-      [key]: truncatedChild
-    };
-    while (Buffer.byteLength(JSON.stringify(candidate), "utf8") > budgetBytes && childBudget > 128) {
-      childBudget = Math.floor(childBudget * 0.7);
-      truncatedChild = truncateValue(child, childBudget);
-      candidate = {
-        ...result,
-        [key]: truncatedChild
-      };
+    // "key": plus a separating comma for every entry after the first.
+    const keyCost = jsonBytes(key) + 1 + (kept > 0 ? 1 : 0);
+    const available = budgetBytes - used - keyCost - MARKER_RESERVE_BYTES;
+    const share = Math.floor((budgetBytes - used) / (entries.length - index));
+    const childBudget = Math.min(available, Math.max(MIN_CHILD_BUDGET, share));
+    if (childBudget < MIN_CHILD_BUDGET) return withOmittedKeys(result, used, entries.slice(index), kept);
+
+    const fitted = fitValue(child, childBudget);
+    if (used + keyCost + fitted.bytes > budgetBytes - MARKER_RESERVE_BYTES) {
+      return withOmittedKeys(result, used, entries.slice(index), kept);
     }
-    if (Buffer.byteLength(JSON.stringify(candidate), "utf8") > budgetBytes) {
-      result.__truncated_keys__ = entries.slice(index).map(([entryKey]) => entryKey);
-      return result;
-    }
-    result[key] = candidate[key];
+    result[key] = fitted.value;
+    used += keyCost + fitted.bytes;
+    kept += 1;
   }
-  return result;
+  return { value: result, bytes: used };
+}
+
+function withOmittedKeys(result: Record<string, unknown>, used: number, omitted: Array<[string, unknown]>, kept: number): FittedValue {
+  const marker = {
+    omitted_keys: omitted.length,
+    first_omitted_keys: omitted.slice(0, MAX_LISTED_OMITTED_KEYS).map(([key]) => key)
+  };
+  result.__truncated_keys__ = marker;
+  const keyCost = jsonBytes("__truncated_keys__") + 1 + (kept > 0 ? 1 : 0);
+  return { value: result, bytes: used + keyCost + jsonBytes(marker) };
 }
 
 function truncateString(value: string, budgetBytes: number): string {
@@ -167,10 +234,6 @@ function truncateString(value: string, budgetBytes: number): string {
     current += char;
   }
   return current + suffix;
-}
-
-function isTerminalTruncation(value: unknown): boolean {
-  return typeof value === "string" || value === null || typeof value !== "object";
 }
 
 export async function executeEnvelope<T>(
@@ -187,7 +250,6 @@ export async function executeEnvelope<T>(
     return envelopeToText(successEnvelope(context, data), config.maxOutputBytes);
   } catch (error) {
     context.retryCount = retryCounter() - beforeRetries;
-    const envelope = error instanceof ObyteMcpError ? errorEnvelope(context, error) : errorEnvelope(context, error);
-    return envelopeToText(envelope, config.maxOutputBytes);
+    return envelopeToText(errorEnvelope(context, error), config.maxOutputBytes);
   }
 }

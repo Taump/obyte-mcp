@@ -46,15 +46,15 @@ This one server serves both mainnet and testnet. Every tool accepts an optional
 
 Usage:
   ${PACKAGE_NAME} [--network mainnet|testnet] [hub/registry overrides]
-  ${PACKAGE_NAME} install [--client vscode|codex|claude-desktop|claude-code] [--name NAME] [--dry-run]
-  ${PACKAGE_NAME} setup [--print-only] [--client vscode|codex|claude-desktop|claude-code]
+  ${PACKAGE_NAME} install [--client vscode|cursor|codex|claude-desktop|claude-code] [--name NAME] [--dry-run]
+  ${PACKAGE_NAME} setup [--print-only] [--client vscode|cursor|codex|claude-desktop|claude-code]
   ${PACKAGE_NAME} doctor [--json]
   ${PACKAGE_NAME} --help
   ${PACKAGE_NAME} --version
 
 Commands:
   (default)              Start the MCP stdio server
-  install                Register the server with a client (runs its CLI, or prints steps)
+  install                Register the server with a client (runs its CLI or writes its config)
   setup                  Print client config snippets without changing anything
   doctor                 Check Node version and runtime config
 
@@ -69,7 +69,7 @@ Options:
   --timeout-ms           Hub request timeout, 1000..120000
   --max-concurrency      Max concurrent hub requests, 1..10
   --max-output-bytes     Max MCP tool response bytes, 16384..1048576
-  --client               Target one client (install/setup); default is all clients
+  --client               Target one client (install/setup); default is every detected client
   --name                 Server name to register (install), default obyte
   --dry-run              Print what install would do without changing anything
 

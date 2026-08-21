@@ -110,16 +110,37 @@ function normalizeAlias(value: string): string {
   return trimmed === "base" || trimmed === "bytes" ? "GBYTE" : trimmed;
 }
 
+const ASSET_KEY_PREFIX = "asset:";
+
+/**
+ * Picks the payload entry for the asset that was requested. The explorer may
+ * normalize the key (symbol case, resolved asset id), so an exact miss falls
+ * back to a case-insensitive match and then to a lone asset entry. Returning
+ * an arbitrary entry would silently answer with a different asset's holders.
+ */
 function extractAssetEntry(decoded: unknown, value: string): Record<string, unknown> {
   const data = isPlainObject(decoded) ? decoded.data : undefined;
-  if (isPlainObject(data)) {
-    const exact = data[`asset:${value}`];
-    if (isPlainObject(exact)) return exact;
-    for (const [key, entry] of Object.entries(data)) {
-      if (key.startsWith("asset:") && isPlainObject(entry)) return entry;
-    }
+  if (!isPlainObject(data)) {
+    throw new ObyteMcpError("INTERNAL_ERROR", "Unexpected explorer payload shape", { value });
   }
-  throw new ObyteMcpError("INTERNAL_ERROR", "Unexpected explorer payload shape", { value });
+
+  const exact = data[`${ASSET_KEY_PREFIX}${value}`];
+  if (isPlainObject(exact)) return exact;
+
+  const assetEntries = Object.entries(data).filter(
+    (entry): entry is [string, Record<string, unknown>] => entry[0].startsWith(ASSET_KEY_PREFIX) && isPlainObject(entry[1])
+  );
+
+  const wanted = value.toLowerCase();
+  const insensitive = assetEntries.find(([key]) => key.slice(ASSET_KEY_PREFIX.length).toLowerCase() === wanted);
+  if (insensitive) return insensitive[1];
+
+  if (assetEntries.length === 1) return assetEntries[0]![1];
+
+  throw new ObyteMcpError("INTERNAL_ERROR", "Explorer payload did not contain the requested asset", {
+    value,
+    payload_asset_keys: assetEntries.slice(0, 10).map(([key]) => key)
+  });
 }
 
 /**

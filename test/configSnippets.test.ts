@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildRuntimeConfig } from "../src/config.js";
-import { commandArgs, installInvocation, serverEntry } from "../src/configSnippets.js";
+import { allConfigSnippets, commandArgs, configSnippet, installInvocation, serverEntry } from "../src/configSnippets.js";
 
 describe("install command builders", () => {
   it("keeps the default (mainnet) launch args minimal", () => {
@@ -53,5 +53,23 @@ describe("install command builders", () => {
   it("has no CLI invocation for claude-desktop (file-based)", () => {
     expect(installInvocation("claude-desktop", buildRuntimeConfig({}, {}), "obyte")).toBeUndefined();
     expect(serverEntry(buildRuntimeConfig({}, {}))).toEqual({ command: "npx", args: ["-y", "obyte-mcp"] });
+  });
+
+  it("has no CLI invocation for cursor (file-based) and documents its config path", () => {
+    const config = buildRuntimeConfig({}, {});
+    expect(installInvocation("cursor", config, "obyte")).toBeUndefined();
+    const snippet = configSnippet("cursor", config);
+    expect(snippet).toContain("~/.cursor/mcp.json");
+    expect(snippet).toContain('"mcpServers"');
+    expect(JSON.parse(snippet.slice(snippet.indexOf("{"), snippet.lastIndexOf("}") + 1))).toEqual({
+      mcpServers: { obyte: { command: "npx", args: ["-y", "obyte-mcp"] } }
+    });
+  });
+
+  it("covers every supported client in the printed snippets", () => {
+    const snippets = allConfigSnippets(buildRuntimeConfig({}, {}));
+    for (const heading of ["## VS Code", "## Cursor", "## Codex CLI", "## Claude Desktop", "## Claude Code"]) {
+      expect(snippets).toContain(heading);
+    }
   });
 });

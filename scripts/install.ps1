@@ -1,7 +1,7 @@
-# Register obyte-mcp with your local MCP clients (VS Code, Codex, Claude Desktop, Claude Code).
+# Register obyte-mcp with your local MCP clients (VS Code, Cursor, Codex, Claude Desktop, Claude Code).
 #
 # Usage:
-#   ./scripts/install.ps1                    # all clients, mainnet default
+#   ./scripts/install.ps1                    # every detected client, mainnet default
 #   ./scripts/install.ps1 --dry-run          # preview without changing anything
 #   ./scripts/install.ps1 --client vscode    # a single client
 #   ./scripts/install.ps1 --network testnet  # make testnet the default network

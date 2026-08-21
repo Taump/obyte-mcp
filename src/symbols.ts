@@ -10,6 +10,9 @@ export interface SymbolOptions {
   tokenRegistryAddress?: string | undefined;
 }
 
+/** Registry symbols are uppercase by convention; asset ids are base64 and case-sensitive. */
+const ASSET_ID_LENGTH = 44;
+
 export function getOfficialTokenRegistryAddress(configuredRegistryAddress?: string): string {
   return configuredRegistryAddress ?? MAINNET_TOKEN_REGISTRY_ADDRESS;
 }
@@ -18,8 +21,7 @@ export async function getSymbolByAsset(client: AaStateVarsReader, asset: string 
   if (asset === null || asset === "base") return "GBYTE";
   if (typeof asset !== "string") return null;
   const tokenRegistryAddress = requireRegistry(options);
-  const stateVars = await client.getAaStateVars(tokenRegistryAddress, `a2s_${asset}`);
-  const resolved = isRecord(stateVars) ? stateVars[`a2s_${asset}`] : undefined;
+  const resolved = await readRegistryVar(client, tokenRegistryAddress, `a2s_${asset}`);
   if (typeof resolved === "string") {
     return resolved;
   }
@@ -27,55 +29,38 @@ export async function getSymbolByAsset(client: AaStateVarsReader, asset: string 
 }
 
 export async function getAssetBySymbol(client: AaStateVarsReader, symbol: string, options: SymbolOptions = {}): Promise<string | null> {
-  if (symbol === "GBYTE" || symbol === "MBYTE" || symbol === "KBYTE" || symbol === "BYTE") return "base";
+  if (baseAlias(symbol)) return "base";
   const tokenRegistryAddress = requireRegistry(options);
-  const stateVars = await client.getAaStateVars(tokenRegistryAddress, `s2a_${symbol}`);
-  const resolved = isRecord(stateVars) ? stateVars[`s2a_${symbol}`] : undefined;
-  return typeof resolved === "string" ? resolved : null;
+  const found = await lookupSymbol(client, symbol, tokenRegistryAddress);
+  return found?.asset ?? null;
 }
 
 export async function getDecimalsBySymbolOrAsset(client: AaStateVarsReader, symbolOrAsset: string, options: SymbolOptions = {}): Promise<number> {
   if (!symbolOrAsset) throw new ObyteMcpError("VALIDATION_ERROR", "symbolOrAsset is undefined");
   // Base aliases have fixed decimals and must work without a registry (e.g. on testnet).
-  if (symbolOrAsset === "base" || symbolOrAsset === "GBYTE") return 9;
-  if (symbolOrAsset === "MBYTE") return 6;
-  if (symbolOrAsset === "KBYTE") return 3;
-  if (symbolOrAsset === "BYTE") return 0;
+  const alias = baseAlias(symbolOrAsset);
+  if (alias) return alias.decimals;
   const tokenRegistryAddress = requireRegistry(options);
 
   let asset: string;
-  if (symbolOrAsset.length === 44) {
+  if (symbolOrAsset.length === ASSET_ID_LENGTH) {
     asset = symbolOrAsset;
-  } else if (symbolOrAsset === symbolOrAsset.toUpperCase()) {
-    const stateVars = await client.getAaStateVars(tokenRegistryAddress, `s2a_${symbolOrAsset}`);
-    const resolved = isRecord(stateVars) ? stateVars[`s2a_${symbolOrAsset}`] : undefined;
-    if (typeof resolved !== "string") throw new ObyteMcpError("HUB_ERROR", `no such symbol ${symbolOrAsset}`);
-    asset = resolved;
   } else {
-    throw new ObyteMcpError("VALIDATION_ERROR", "not valid symbolOrAsset");
+    const found = await lookupSymbol(client, symbolOrAsset, tokenRegistryAddress);
+    if (!found) throw new ObyteMcpError("HUB_ERROR", `no such symbol ${symbolOrAsset}`);
+    asset = found.asset;
   }
 
-  const descVars = await client.getAaStateVars(tokenRegistryAddress, `current_desc_${asset}`);
-  const descHash = isRecord(descVars) ? descVars[`current_desc_${asset}`] : undefined;
-  if (typeof descHash !== "string") throw new ObyteMcpError("HUB_ERROR", `no decimals for ${symbolOrAsset}`);
-
-  const decimalsVars = await client.getAaStateVars(tokenRegistryAddress, `decimals_${descHash}`);
-  const decimals = isRecord(decimalsVars) ? decimalsVars[`decimals_${descHash}`] : undefined;
-  if (typeof decimals !== "number") throw new ObyteMcpError("HUB_ERROR", `no decimals for ${symbolOrAsset}`);
-  return decimals;
+  return decimalsForAsset(client, asset, tokenRegistryAddress, symbolOrAsset);
 }
 
 export async function resolveAsset(client: AaStateVarsReader, value: string, options: SymbolOptions = {}): Promise<unknown> {
-  if (value === "base" || value === "GBYTE" || value === "MBYTE" || value === "KBYTE" || value === "BYTE") {
-    return {
-      input: value,
-      asset: "base",
-      symbol: value === "base" ? "GBYTE" : value,
-      decimals: value === "GBYTE" || value === "base" ? 9 : value === "MBYTE" ? 6 : value === "KBYTE" ? 3 : 0
-    };
+  const alias = baseAlias(value);
+  if (alias) {
+    return { input: value, asset: "base", symbol: alias.symbol, decimals: alias.decimals };
   }
 
-  if (value.length === 44) {
+  if (value.length === ASSET_ID_LENGTH) {
     const [symbol, decimals] = await Promise.all([
       getSymbolByAsset(client, value, options),
       getDecimalsBySymbolOrAsset(client, value, options).catch(() => null)
@@ -83,9 +68,67 @@ export async function resolveAsset(client: AaStateVarsReader, value: string, opt
     return { input: value, asset: value, symbol, decimals };
   }
 
-  const asset = await getAssetBySymbol(client, value, options);
-  const decimals = await getDecimalsBySymbolOrAsset(client, value, options).catch(() => null);
-  return { input: value, asset, symbol: value, decimals };
+  const tokenRegistryAddress = requireRegistry(options);
+  const found = await lookupSymbol(client, value, tokenRegistryAddress);
+  if (!found) {
+    return {
+      input: value,
+      asset: null,
+      symbol: null,
+      decimals: null,
+      note: `No asset is registered under the symbol "${value}" in the selected registry. Registry symbols are uppercase and the input is uppercased before lookup; check the symbol or pass the 44-character asset id.`
+    };
+  }
+  const decimals = await decimalsForAsset(client, found.asset, tokenRegistryAddress, found.symbol).catch(() => null);
+  return { input: value, asset: found.asset, symbol: found.symbol, decimals };
+}
+
+interface SymbolLookup {
+  /** The registry spelling that matched, which is what should be shown to users. */
+  symbol: string;
+  asset: string;
+}
+
+/**
+ * Looks a symbol up in the registry. Registry symbols are always uppercase, so
+ * the input is normalized first: agents passing "ousd" would otherwise silently
+ * resolve to nothing.
+ */
+async function lookupSymbol(client: AaStateVarsReader, symbol: string, tokenRegistryAddress: string): Promise<SymbolLookup | null> {
+  const normalized = symbol.trim().toUpperCase();
+  const resolved = await readRegistryVar(client, tokenRegistryAddress, `s2a_${normalized}`);
+  return typeof resolved === "string" ? { symbol: normalized, asset: resolved } : null;
+}
+
+async function decimalsForAsset(client: AaStateVarsReader, asset: string, tokenRegistryAddress: string, label: string): Promise<number> {
+  const descHash = await readRegistryVar(client, tokenRegistryAddress, `current_desc_${asset}`);
+  if (typeof descHash !== "string") throw new ObyteMcpError("HUB_ERROR", `no decimals for ${label}`);
+
+  const decimals = await readRegistryVar(client, tokenRegistryAddress, `decimals_${descHash}`);
+  if (typeof decimals !== "number") throw new ObyteMcpError("HUB_ERROR", `no decimals for ${label}`);
+  return decimals;
+}
+
+async function readRegistryVar(client: AaStateVarsReader, tokenRegistryAddress: string, varName: string): Promise<unknown> {
+  const stateVars = await client.getAaStateVars(tokenRegistryAddress, varName);
+  return isRecord(stateVars) ? stateVars[varName] : undefined;
+}
+
+/** Base-asset aliases are case-insensitive and never touch the registry. */
+function baseAlias(value: string): { symbol: string; decimals: number } | undefined {
+  switch (value.trim().toUpperCase()) {
+    case "BASE":
+    case "GBYTE":
+      return { symbol: "GBYTE", decimals: 9 };
+    case "MBYTE":
+      return { symbol: "MBYTE", decimals: 6 };
+    case "KBYTE":
+      return { symbol: "KBYTE", decimals: 3 };
+    case "BYTE":
+      return { symbol: "BYTE", decimals: 0 };
+    default:
+      return undefined;
+  }
 }
 
 function requireRegistry(options: SymbolOptions): string {

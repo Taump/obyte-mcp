@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { buildRuntimeConfig } from "./config.js";
 import { CLIENT_NAMES, type ClientName } from "./cliArgs.js";
-import { DEFAULT_SERVER_NAME, configSnippet, installInvocation, serverEntry } from "./configSnippets.js";
+import { DEFAULT_SERVER_NAME, allConfigSnippets, configSnippet, installInvocation, serverEntry } from "./configSnippets.js";
 import { ObyteMcpError } from "./errors.js";
 import type { CliOptions, RuntimeConfig } from "./types.js";
 
@@ -16,13 +16,14 @@ interface InstallOptions {
 
 interface StepResult {
   client: ClientName;
-  status: "installed" | "dry-run" | "printed" | "failed";
+  status: "installed" | "dry-run" | "printed" | "skipped" | "failed";
   detail: string;
 }
 
 export async function runInstall(cliOptions: CliOptions, install: InstallOptions): Promise<void> {
   const config = buildRuntimeConfig(process.env, cliOptions);
   const serverName = install.serverName ?? DEFAULT_SERVER_NAME;
+  const targeted = install.client !== undefined;
   const clients = install.client ? [install.client] : CLIENT_NAMES;
 
   out(`# obyte-mcp install\n`);
@@ -32,15 +33,80 @@ export async function runInstall(cliOptions: CliOptions, install: InstallOptions
 
   const results: StepResult[] = [];
   for (const client of clients) {
-    results.push(client === "claude-desktop" ? installDesktop(config, serverName, install.dryRun) : installViaCli(client, config, serverName, install.dryRun));
+    // Without an explicit --client, clients that are not installed are skipped
+    // quietly instead of printing manual steps nobody asked for.
+    if (!targeted && !isClientInstalled(client)) {
+      results.push({ client, status: "skipped", detail: "not installed on this machine" });
+      continue;
+    }
+    results.push(
+      usesJsonConfigFile(client)
+        ? installJsonClient(client, config, serverName, install.dryRun)
+        : installViaCli(client, config, serverName, install.dryRun)
+    );
   }
 
+  reportSummary(results, config, serverName, targeted);
+
+  if (results.some((result) => result.status === "failed")) process.exitCode = 1;
+}
+
+function reportSummary(results: StepResult[], config: RuntimeConfig, serverName: string, targeted: boolean): void {
   out(`\n## Summary`);
   for (const result of results) {
     out(`${statusIcon(result.status)} ${result.client}: ${result.detail}`);
   }
 
-  if (results.some((result) => result.status === "failed")) process.exitCode = 1;
+  const changed = results.filter((result) => result.status === "installed");
+  if (changed.length > 0) {
+    out(`\nRestart ${changed.map((result) => result.client).join(", ")} to load the server, then verify with:`);
+    out(`  npx -y obyte-mcp doctor`);
+    return;
+  }
+
+  if (!targeted && results.every((result) => result.status === "skipped")) {
+    out(`\nNo supported MCP client was detected. Install one, or add the server by hand:\n`);
+    out(allConfigSnippets(config, serverName));
+  }
+}
+
+/** Clients configured by writing a JSON file rather than by running their own CLI. */
+function usesJsonConfigFile(client: ClientName): boolean {
+  return client === "claude-desktop" || client === "cursor";
+}
+
+function jsonConfigPath(client: ClientName): string {
+  return client === "cursor" ? cursorConfigPath() : claudeDesktopConfigPath();
+}
+
+/** A client counts as installed when its CLI is on PATH or its config directory exists. */
+export function isClientInstalled(client: ClientName): boolean {
+  if (usesJsonConfigFile(client)) return existsSync(dirname(jsonConfigPath(client)));
+  const command = clientCommand(client);
+  return command !== undefined && isCommandAvailable(command);
+}
+
+function clientCommand(client: ClientName): string | undefined {
+  if (client === "claude-code") return "claude";
+  if (client === "codex") return "codex";
+  if (client === "vscode") return "code";
+  return undefined;
+}
+
+/**
+ * Looks the command up on PATH directly. Spawning a probe would either need a
+ * shell (deprecated with args, and needless quoting risk) or `where`/`which`,
+ * which are not uniformly available.
+ */
+function isCommandAvailable(command: string): boolean {
+  const directories = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  const extensions = process.platform === "win32" ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";") : [""];
+  for (const directory of directories) {
+    for (const extension of extensions) {
+      if (existsSync(join(directory, `${command}${extension}`))) return true;
+    }
+  }
+  return false;
 }
 
 function installViaCli(client: ClientName, config: RuntimeConfig, serverName: string, dryRun: boolean): StepResult {
@@ -68,9 +134,8 @@ function installViaCli(client: ClientName, config: RuntimeConfig, serverName: st
   return { client, status: "installed", detail: `registered via \`${invocation.command} mcp add\`` };
 }
 
-function installDesktop(config: RuntimeConfig, serverName: string, dryRun: boolean): StepResult {
-  const client: ClientName = "claude-desktop";
-  const path = claudeDesktopConfigPath();
+function installJsonClient(client: ClientName, config: RuntimeConfig, serverName: string, dryRun: boolean): StepResult {
+  const path = jsonConfigPath(client);
   const entry = serverEntry(config);
   const serverConfig = { command: entry.command, args: entry.args };
 
@@ -84,7 +149,7 @@ function installDesktop(config: RuntimeConfig, serverName: string, dryRun: boole
 
   const dir = dirname(path);
   if (!existsSync(dir)) {
-    out(`Claude Desktop config directory does not exist. Is Claude Desktop installed? Add this manually:\n`);
+    out(`${client} config directory does not exist. Is ${client} installed? Add this manually:\n`);
     out(configSnippet(client, config, serverName));
     return { client, status: "printed", detail: "config dir not found; printed manual steps" };
   }
@@ -112,7 +177,7 @@ function installDesktop(config: RuntimeConfig, serverName: string, dryRun: boole
   root.mcpServers = servers;
   writeFileSync(path, `${JSON.stringify(root, null, 2)}\n`, "utf8");
 
-  out(`${existed ? "Updated" : "Added"} server "${serverName}". Restart Claude Desktop to load it.`);
+  out(`${existed ? "Updated" : "Added"} server "${serverName}". Restart ${client} to load it.`);
   return { client, status: "installed", detail: `${existed ? "updated" : "added"} in ${path}` };
 }
 
@@ -145,8 +210,7 @@ function runCliWindows(command: string, args: string[]): CliRun {
   // npm-installed CLIs (claude, code, codex) are .cmd shims on Windows; modern Node
   // refuses to spawn them without a shell (CVE-2024-27980). Probe with where.exe,
   // then run through the shell with cmd-style quoting.
-  const probe = spawnSync("where", [command], { stdio: "ignore" });
-  if (probe.error || probe.status !== 0) {
+  if (!isCommandAvailable(command)) {
     return { ok: false, missing: true, message: `${command} not found on PATH` };
   }
   const line = [command, ...args.map(quoteForCmd)].join(" ");
@@ -161,6 +225,10 @@ function quoteForCmd(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
 }
 
+export function cursorConfigPath(): string {
+  return join(homedir(), ".cursor", "mcp.json");
+}
+
 export function claudeDesktopConfigPath(): string {
   const home = homedir();
   if (process.platform === "darwin") return join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json");
@@ -172,6 +240,7 @@ function statusIcon(status: StepResult["status"]): string {
   if (status === "installed") return "ok  ";
   if (status === "dry-run") return "dry ";
   if (status === "printed") return "note";
+  if (status === "skipped") return "skip";
   return "fail";
 }
 

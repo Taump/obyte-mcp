@@ -50,6 +50,7 @@ export function installInvocation(client: ClientName, config: RuntimeConfig, ser
 export function configSnippet(client: ClientName, config: RuntimeConfig, serverName = DEFAULT_SERVER_NAME): string {
   if (client === "claude-code") return claudeCodeSnippet(config, serverName);
   if (client === "claude-desktop") return claudeDesktopSnippet(config, serverName);
+  if (client === "cursor") return cursorSnippet(config, serverName);
   if (client === "vscode") return vscodeSnippet(config, serverName);
   return codexSnippet(config, serverName);
 }
@@ -58,6 +59,10 @@ export function allConfigSnippets(config: RuntimeConfig, serverName = DEFAULT_SE
   return `## VS Code
 
 ${vscodeSnippet(config, serverName)}
+
+## Cursor
+
+${cursorSnippet(config, serverName)}
 
 ## Codex CLI
 
@@ -103,6 +108,13 @@ args = [${argsToml}]
 Or register it from a terminal (newer Codex CLI):
 
 ${fencedShell(`codex mcp add ${serverName} -- ${entry.command} ${entry.args.map(shellQuote).join(" ")}`)}`;
+}
+
+export function cursorSnippet(config: RuntimeConfig, serverName = DEFAULT_SERVER_NAME): string {
+  const entry = serverEntry(config);
+  return `Edit \`~/.cursor/mcp.json\` (global) or \`.cursor/mcp.json\` (this project) and restart Cursor:
+
+${fencedJson({ mcpServers: { [serverName]: { command: entry.command, args: entry.args } } })}`;
 }
 
 export function claudeDesktopSnippet(config: RuntimeConfig, serverName = DEFAULT_SERVER_NAME): string {
