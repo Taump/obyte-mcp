@@ -1,0 +1,135 @@
+# Publishes server.json to the Official MCP Registry.
+#
+# npm publishing stays manual - this workflow only registers a version that is
+# already on npm. It authenticates with GitHub OIDC, so there is no token, no
+# secret and no authorized OAuth app: GitHub signs a short-lived token for this
+# run and the registry reads the repository owner from it to grant the
+# io.github.<owner>/* namespace.
+name: Publish to MCP Registry
+
+on:
+  # A version bump lands in these files. The job decides for itself whether the
+  # version is actually new, so re-pushes and unrelated edits are harmless.
+  push:
+    branches: [master]
+    paths:
+      - package.json
+      - server.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-mcp-registry
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Read and verify version
+        id: version
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version package.json)
+          name=$(jq -r .name server.json)
+          server_version=$(jq -r .version server.json)
+          package_version=$(jq -r '.packages[0].version' server.json)
+          identifier=$(jq -r '.packages[0].identifier' server.json)
+
+          if [ "$server_version" != "$version" ] || [ "$package_version" != "$version" ]; then
+            echo "::error::server.json ($server_version / $package_version) does not match package.json ($version). Run: npm run sync-version"
+            exit 1
+          fi
+
+          {
+            echo "version=$version"
+            echo "name=$name"
+            echo "encoded_name=${name//\//%2F}"
+            echo "identifier=$identifier"
+          } >> "$GITHUB_OUTPUT"
+          echo "Publishing $name $version (npm package $identifier)"
+
+      - name: Skip if this version is already registered
+        id: registered
+        env:
+          ENCODED_NAME: ${{ steps.version.outputs.encoded_name }}
+          NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            "https://registry.modelcontextprotocol.io/v0.1/servers/${ENCODED_NAME}/versions/${VERSION}")
+          case "$code" in
+            200)
+              echo "already=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::${NAME} ${VERSION} is already in the registry - nothing to do."
+              ;;
+            404)
+              echo "already=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Registry lookup failed with HTTP $code"
+              exit 1
+              ;;
+          esac
+
+      # The registry fetches registry.npmjs.org/<package>/<version> and checks the
+      # mcpName field there, so the npm release has to exist first - and a fresh
+      # publish needs a moment to propagate.
+      - name: Wait for the version on npm
+        if: steps.registered.outputs.already == 'false'
+        env:
+          IDENTIFIER: ${{ steps.version.outputs.identifier }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/${IDENTIFIER}/${VERSION}")
+            if [ "$code" = "200" ]; then
+              echo "Found ${IDENTIFIER}@${VERSION} on npm."
+              exit 0
+            fi
+            echo "Attempt ${attempt}/20: npm returned ${code}, waiting 30s..."
+            sleep 30
+          done
+          echo "::error::${IDENTIFIER}@${VERSION} is not on npm. Run 'npm publish' first, then re-run this workflow from the Actions tab."
+          exit 1
+
+      - name: Install mcp-publisher
+        if: steps.registered.outputs.already == 'false'
+        run: |
+          set -euo pipefail
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Validate server.json
+        if: steps.registered.outputs.already == 'false'
+        run: ./mcp-publisher validate
+
+      - name: Authenticate with GitHub OIDC
+        if: steps.registered.outputs.already == 'false'
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        if: steps.registered.outputs.already == 'false'
+        run: ./mcp-publisher publish
+
+      - name: Confirm
+        if: steps.registered.outputs.already == 'false'
+        env:
+          ENCODED_NAME: ${{ steps.version.outputs.encoded_name }}
+          NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            "https://registry.modelcontextprotocol.io/v0.1/servers/${ENCODED_NAME}/versions/${VERSION}")
+          if [ "$code" != "200" ]; then
+            echo "::error::Publish reported success but the registry returned HTTP $code"
+            exit 1
+          fi
+          echo "::notice::Published ${NAME} ${VERSION} to the MCP Registry."

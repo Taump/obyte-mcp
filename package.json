@@ -1,7 +1,7 @@
 {
   "name": "obyte-mcp",
-  "version": "0.3.0",
-  "mcpName": "io.github.taump/obyte-mcp",
+  "version": "0.3.1",
+  "mcpName": "io.github.Taump/obyte-mcp",
   "description": "Local stdio MCP server for querying Obyte mainnet and testnet hubs.",
   "type": "module",
   "bin": {

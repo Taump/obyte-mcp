@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.taump/obyte-mcp",
+  "name": "io.github.Taump/obyte-mcp",
   "title": "Obyte MCP",
   "description": "Local stdio MCP server that serves both Obyte mainnet and testnet: hubs, autonomous agents, balances, units, AA state, AA dry runs, and token symbols. Each tool takes an optional network.",
   "websiteUrl": "https://github.com/Taump/obyte-mcp",
@@ -8,13 +8,13 @@
     "url": "https://github.com/Taump/obyte-mcp",
     "source": "github"
   },
-  "version": "0.3.0",
+  "version": "0.3.1",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "obyte-mcp",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

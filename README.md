@@ -643,7 +643,7 @@ and npm ownership is verified through the `mcpName` field in `package.json`:
 
 ```json
 {
-  "mcpName": "io.github.taump/obyte-mcp"
+  "mcpName": "io.github.Taump/obyte-mcp"
 }
 ```
 
@@ -667,10 +667,10 @@ mcp-publisher publish
 Verify publication:
 
 ```bash
-curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.taump/obyte-mcp"
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Taump/obyte-mcp"
 ```
 
-With GitHub authentication, the registry namespace must match the GitHub owner. This project uses `io.github.taump/obyte-mcp`, so publish while authenticated as the GitHub account that owns `Taump/obyte-mcp`, or publish from a GitHub Action in that repository.
+With GitHub authentication, the registry namespace must match the GitHub owner **including its exact case**: the registry builds the permission from the GitHub login verbatim and matches it case-sensitively (registry issue #689). The owner is `Taump`, so the name is `io.github.Taump/obyte-mcp` and `mcpName` in `package.json` must match it character for character - npm ownership validation compares the two exactly. Publish while authenticated as the account that owns `Taump/obyte-mcp`, or from a GitHub Action in that repository.
 
 ## Local Development
 
